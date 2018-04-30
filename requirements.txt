@@ -1,0 +1,6 @@
+pywin32
+pyautogui
+cmake
+dlib
+face_recognition
+deap
