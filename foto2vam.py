@@ -23,7 +23,6 @@ def main( args ):
 
     inputPath = args.inputJsonPath
     targetPath = args.targetPath
-    testJsonPath = args.testJsonPath
     if not os.path.isabs(targetPath):
         targetPath = os.path.join(inputPath, targetPath)
 
