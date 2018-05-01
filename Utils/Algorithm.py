@@ -22,13 +22,15 @@ class Algorithm:
         # Structure initializers
         self.toolbox.register("individual", tools.initIterate, creator.Individual, self.toolbox.attr_float)
             
-            
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
         self.toolbox.register("evaluate", params.evaluate)
         self.toolbox.register("mate", tools.cxBlend, alpha=0.5)
         self.toolbox.register("mutate", params.mutate,  toolbox=self.toolbox, mutProb=0.05)
         self.toolbox.decorate("mate", params.checkBounds())
         self.toolbox.decorate("mutate", params.checkBounds())
+        self.toolbox.register("map", params.map)
+        #self.toolbox.decorate("mate", params.registerChange())
+        #self.toolbox.decorate("mutate", params.registerChange())
         self.toolbox.register("select", tools.selTournament, tournsize=3)
         
         

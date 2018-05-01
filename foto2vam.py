@@ -33,6 +33,7 @@ def main( args ):
     testJsonPath = args.testJsonPath
     if not os.path.isabs(testJsonPath):
         testJsonPath = os.path.join(inputPath, testJsonPath)
+    testJsonPath = os.path.join(testJsonPath, 'test.json')
 
 
     print( "Input path: {}\nTarget Images: {}\nOutput path: {}\n\n".format( inputPath, targetPath, outputPath ) )
@@ -87,10 +88,11 @@ def main( args ):
     # Set up the parameters for the algorithm
     params = Params( protoFace=protoFace,
                      vamWindow=window,
-                     testJsonPath=os.path.join(testJsonPath, 'test.json'),
+                     testJsonPath=testJsonPath,
                      targetFaces = targetFaces,
                      outputPath = outputPath,
-                     saveImages = args.saveImages
+                     saveImages = args.saveImages,
+                     numThreads = args.numThreads
                       )
 
     # Run the algorithm!
@@ -149,6 +151,7 @@ Now each time you click 'Load Preset' it should remember this folder. (Note: ini
     parser.add_argument('--outputPath', help="Directory to write output data to. Absolute, or relative to inputJsonPath", default="results")
     parser.add_argument('--testJsonPath', help="Directory where test JSON will be stored. Absolute, or relative to inputJsonPath", default="test")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
+    parser.add_argument('--numThreads', type=int, default=1, help="Number of recognition threads to use")
 
 
     return parser.parse_args()
