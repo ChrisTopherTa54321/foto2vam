@@ -8,6 +8,7 @@ import time
 import os
 import queue
 
+
 ###############################
 class Params:
 
@@ -36,6 +37,7 @@ class Params:
             self.pool = None
         self.evalNum = 0
         self.failures=0
+        self.bestCnt=0
 
         print( "Will be comparing faces to: ")
         imageCount = 0
@@ -79,7 +81,7 @@ class Params:
             self.protoFace.save( self.jsonPath )
             self.vamWindow.loadLook()
             # Delay to allow time for the preset to load
-            time.sleep(.2)
+            time.sleep(.3)
             face_images[angle] = self.vamWindow.getScreenShot()
         return face_images
 
@@ -126,7 +128,7 @@ class Params:
         #Now iterate through the float list, applying a mutation with probability mutProb
         for i in range(len(newInd)):
             if random.random() <= mutProb:
-                newInd[i] += random.uniform(-0.25, .25)
+                newInd[i] += random.uniform(-0.35, .35)
         return newInd,
 
     ###############################
@@ -200,6 +202,22 @@ class Params:
                 pass
         print("Worker {} done!".format(procId))
 
+
+    def saveBest(self, hof, args):
+        self.bestCnt += 1
+        self.protoFace.importFloatList(hof[0])
+        self.protoFace.setRotation(0)
+        self.protoFace.save(self.jsonPath)
+        self.vamWindow.loadLook()
+
+        # Delay to allow time for the preset to load
+        time.sleep(.3)
+        image = self.vamWindow.getScreenShot()
+
+        encodedFace = EncodedFace.EncodedFace(image, keepImg = True)
+        encodedFace.saveImage(os.path.join(self.outputPath,'best_{}.png'.format(self.bestCnt)))
+        self.protoFace.save(os.path.join(self.outputPath, "best_{}.json".format(self.bestCnt)))
+        return 0
 
     ###############################
     # Ensure the individual is within min-max of face

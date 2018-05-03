@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw
 
 class EncodedFace:
 
-    def __init__(self, image, region=None, keepImg=False):
+    def __init__(self, image, region=None, keepImg=False, imgPadding=125):
         nImg = numpy.array(image)
         if region is None:
             self._region =  face_recognition.face_locations(nImg)[0]
@@ -15,6 +15,12 @@ class EncodedFace:
         else:
             self._region = _region
         top,right,bottom,left = self._region
+
+        # Apply padding to save more of image
+        top = max(0, top-imgPadding)
+        left = max(0, left-imgPadding)
+        bottom = min(nImg.shape[0], bottom+imgPadding)
+        right = min(nImg.shape[1], right+imgPadding)
 
         # crop image to just the face
         nImg = nImg[top:bottom, left:right]
@@ -31,7 +37,7 @@ class EncodedFace:
 
     def getRegion(self):
         return self._region
-    
+
     def compare(self, otherFace):
         return face_recognition.face_distance([self._encodings], otherFace._encodings).mean()
 
