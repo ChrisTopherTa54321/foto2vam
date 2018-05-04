@@ -4,6 +4,7 @@ import glob
 import time
 from Utils.Vam.window import VamWindow
 from Utils.Algorithm.Genetic.algorithm import Algorithm
+from Utils.Face.normalize import FaceNormalizer
 from PIL import Image
 
 # Set DPI Awareness  (Windows 10 and 8). Makes GetWindowRect return pxiel coordinates
@@ -71,13 +72,15 @@ def main( args ):
                     pass
 
     targetFaces = {}
+    faceNormalizer = FaceNormalizer(256)
     for angle,imageList in targetImages.items():
         targetFaces[angle] = []
         for imagePath in imageList:
             try:
                 print("Processing {}".format(imagePath))
                 image = Image.open( imagePath )
-                face = EncodedFace( image, keepImg=args.saveImages )
+                normalized = faceNormalizer.normalize(image)
+                face = EncodedFace( normalized, keepImg=args.saveImages )
                 targetFaces[angle].append(face)
             except:
                 print("Failed to encode face from image")
