@@ -1,5 +1,5 @@
 # Encapsulate parameters to the algorithm
-from . import EncodedFace
+from Utils.Face.encoded import EncodedFace
 from win32api import GetKeyState
 from win32con import VK_CAPITAL, VK_SCROLL
 import random

@@ -2,8 +2,8 @@ import argparse
 import os
 import glob
 import time
-from Utils.VamWindow import VamWindow
-from Utils.Algorithm import Algorithm
+from Utils.Vam.window import VamWindow
+from Utils.Algorithm.Genetic.algorithm import Algorithm
 from PIL import Image
 
 # Set DPI Awareness  (Windows 10 and 8). Makes GetWindowRect return pxiel coordinates
@@ -46,9 +46,9 @@ def main( args ):
     window.setClickLocations([(130,39), (248,178)])
 
     # Theses imports takes a while, so we delay loading until here
-    from Utils.EncodedFace import EncodedFace
-    from Utils.VamFace import VamFace
-    from Utils.AlgorithmParams import Params
+    from Utils.Face.encoded import EncodedFace
+    from Utils.Face.vam import VamFace
+    from Utils.Algorithm.Genetic.params import Params
 
     # Load in our input face parameters
     protoFace = VamFace( baseFileName = "test/base.json", minFileName= "test/minimum.json", maxFileName="test/maximum.json")

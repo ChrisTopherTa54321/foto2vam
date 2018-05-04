@@ -5,8 +5,6 @@ import win32con
 import pyautogui
 import os
 import time
-from PIL import Image
-from cmath import rect
 
 # convert a rect of (left, top, right, bottom) to (x, y, w, h)
 def _rect2xywh(rect):
