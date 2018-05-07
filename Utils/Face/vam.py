@@ -13,6 +13,8 @@ class VamFace:
 
         # reference to the 'morphs' in the json
         self.morphs = None
+        # reference to the parent of 'morphs' in the Json
+        self.morphsContainer = None
         # reference to head rotation in the json
         self.headRotation = None
 
@@ -23,20 +25,25 @@ class VamFace:
 
         self.load( baseFileName )
 
-        minFace = VamFace( minFileName ) if not minFileName is None else None
-        maxFace = VamFace( maxFileName ) if not maxFileName is None else None
+        self.minFace = VamFace( minFileName ) if not minFileName is None else None
+        self.maxFace = VamFace( maxFileName ) if not maxFileName is None else None
 
+        self._createMorphFloats()
+
+    def _createMorphFloats(self):
         # Create a list of floats representing each morph. Pull minimum and maximum
         # values, defaulting to 0-1.0 if a value is not present
+        self.morphFloats = []
+        self.morphInfo = []
         for morph in self.morphs:
             minVal = 0
             maxVal = 1.0
             defaultVal = 0
 
-            val = minFace._getMorphValue(morph['name']) if not minFace is None else None
+            val = self.minFace._getMorphValue(morph['name']) if not self.minFace is None else None
             minVal = float(val) if not val is None else minVal
 
-            val = maxFace._getMorphValue(morph['name']) if not minFace is None else None
+            val = self.maxFace._getMorphValue(morph['name']) if not self.maxFace is None else None
             maxVal = float(val) if not val is None else maxVal
 
             if 'value' in morph:
@@ -44,6 +51,37 @@ class VamFace:
             self.morphFloats.append( defaultVal )
             self.morphInfo.append( { 'min': minVal, 'max': maxVal, 'name': morph['name'] } )
 
+
+    # Discard morphs in this face that are not in otherFace. Aligns morphFloats between the two faces.
+    def matchMorphs(self, otherFace):
+        newMorphs = []
+        self.updateJson()
+
+        # Keep only morphs that exist in the other face. If the other face has a morph that
+        # we don't then add it as a 0 value
+        for otherMorph in otherFace.morphs:
+            morph = self._getMorph(otherMorph['name'])
+            if not morph:
+                # If we didn't have a value for the morph in the other face, then set to 0
+                morph = otherMorph.copy()
+                morph['value'] = 0
+            newMorphs.append(morph)
+
+        self.morphsContainer['morphs'] = newMorphs
+        self.morphs = self.morphsContainer['morphs']
+        self._createMorphFloats()
+
+    def trimToAnimatable(self):
+        newMorphs = []
+        print("Starting trim with {} morphs".format(len(self.morphs)))
+        self.updateJson()
+        for morph in self.morphs:
+            if 'animatable' in morph:
+                newMorphs.append(morph)
+        self.morphsContainer['morphs'] = newMorphs
+        self.morphs = self.morphsContainer['morphs']
+        print("Ending trim with {} morphs".format(len(self.morphs)))
+        self._createMorphFloats()
 
     # Load a JSON file
     def load(self, filename):
@@ -53,18 +91,54 @@ class VamFace:
 
             # Find the morphs in the json file
             storable = list(filter(lambda x : x['id'] == "geometry", storables))
-            self.morphs = storable[0]['morphs']
+
+            # Dont' know how else to store a reference in Python
+            self.morphsContainer = storable[0]
+            self.morphs = self.morphsContainer['morphs']
+
+            # Try to normalize the face pose
+            self.morphsContainer["hair"] = "No Hair"
+            self.morphsContainer["clothing"] = []
+            self.morphsContainer["character"] = "Female 1"
+
+            storable = list(filter(lambda x : x['id'] == "rescaleObject", storables))
+            if len(storable) > 0:
+                storable[0]["scale"] = 1.0
+
+            storable = list(filter(lambda x : x['id'] == "EyelidControl", storables))
+            if len(storable) > 0:
+                storable[0]["blinkEnabled"] = "false"
+            else:
+                newNode = {
+                          "id" : "EyelidControl",
+                          "blinkEnabled" : "false"
+                          }
+                storables.append(newNode)
+
+            storable = list(filter(lambda x : x['id'] == "AutoExpressions", storables))
+            if len(storable) > 0:
+                storable[0]["enabled"] = "false"
+            else:
+                newNode = {
+                          "id" : "AutoExpressions",
+                          "enabled" : "false"
+                          }
+                storables.append(newNode)
+
+            storable = list(filter(lambda x : x['id'] == "JawControl", storables))
+            if len(storable) > 0:
+                storable[0]["targetRotationX"] = 0
+
 
             # Find the head rotation value in the json
             storable = list(filter(lambda x : x['id'] == "headControl", storables))
             if storable:
+                storable[0]['rotation'] = { "x" : 0, "y" : 0, "z": 0 }
                 self.headRotation = storable[0]['rotation']
             else:
                 newNode = {
                           "id" : "headControl",
-                          "position" : { "x" : 0, "y" : 0, "z": 0 },
                           "rotation" : { "x" : 0, "y" : 0, "z": 0 },
-                          "positionState" : "On",
                           "rotationState" : "On"
                           }
                 storables.append(newNode)
@@ -79,9 +153,12 @@ class VamFace:
 
 
     # randomize all face values
-    def randomize(self):
-        for idx in range(len(self.morphFloats)):
-            self.morphFloats[idx] = random.uniform( self.morphInfo[idx]['min'], self.morphInfo[idx]['max'] )
+    def randomize(self, morphIdx = None):
+        if morphIdx is None:
+            for idx in range(len(self.morphFloats)):
+                self.morphFloats[idx] = random.uniform( self.morphInfo[idx]['min'], self.morphInfo[idx]['max'] )
+        else:
+            self.morphFloats[morphIdx] = random.uniform( self.morphInfo[morphIdx]['min'], self.morphInfo[morphIdx]['max'] )
 
     def importFloatList(self, floatList):
         if len(floatList) == len(self.morphFloats):
@@ -98,6 +175,12 @@ class VamFace:
         for idx,morph in enumerate(self.morphs):
             morph["value"] = self.morphFloats[idx]
 
-    def _getMorphValue(self, key):
+    def _getMorph(self, key):
         morph = list( filter( lambda x : x['name'] == key, self.morphs ) )
-        return morph[0]['value'] if len(morph) > 0 and 'value' in morph[0] else None
+        if len(morph) > 0:
+            return morph[0]
+        return None
+
+    def _getMorphValue(self, key):
+        morph = self.getMorph(key)
+        return morph['value'] if morph and 'value' in morph else None
