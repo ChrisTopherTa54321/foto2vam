@@ -57,7 +57,18 @@ class VamFace:
 
             # Find the head rotation value in the json
             storable = list(filter(lambda x : x['id'] == "headControl", storables))
-            self.headRotation = storable[0]['rotation']
+            if storable:
+                self.headRotation = storable[0]['rotation']
+            else:
+                newNode = {
+                          "id" : "headControl",
+                          "position" : { "x" : 0, "y" : 0, "z": 0 },
+                          "rotation" : { "x" : 0, "y" : 0, "z": 0 },
+                          "positionState" : "On",
+                          "rotationState" : "On"
+                          }
+                storables.append(newNode)
+                self.headRotation = newNode["rotation"]
 
 
     # Save json file
