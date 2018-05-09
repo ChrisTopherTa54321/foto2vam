@@ -24,17 +24,8 @@ def main( args ):
 
     inputPath = args.inputJsonPath
     targetPath = args.targetPath
-    if not os.path.isabs(targetPath):
-        targetPath = os.path.join(inputPath, targetPath)
-
     outputPath = args.outputPath
-    if not os.path.isabs(outputPath):
-        outputPath = os.path.join(inputPath, outputPath)
-
-    testJsonPath = args.testJsonPath
-    if not os.path.isabs(testJsonPath):
-        testJsonPath = os.path.join(inputPath, testJsonPath)
-    testJsonPath = os.path.join(testJsonPath, 'test.json')
+    testJsonPath = os.path.join(args.testJsonPath, 'test.json')
 
 
     print( "Input path: {}\nTarget Images: {}\nOutput path: {}\n\n".format( inputPath, targetPath, outputPath ) )
@@ -150,9 +141,9 @@ Now each time you click 'Load Preset' it should remember this folder. (Note: ini
     parser.add_argument("--saveJson", action='store_true', default=False, help="Save json of each step")
     parser.add_argument('--population', type=int, default=100, help="Population size. Smaller converges faster, larger tries a larger variety of morphs. Default: 100")
     parser.add_argument('--inputJsonPath', help="Directory containing base.json, minimum.json and maximum.json", required=True)
-    parser.add_argument('--targetPath', help="Directory target image folders. Absolute, or relative to inputJsonPath", default="target")
-    parser.add_argument('--outputPath', help="Directory to write output data to. Absolute, or relative to inputJsonPath", default="results")
-    parser.add_argument('--testJsonPath', help="Directory where test JSON will be stored. Absolute, or relative to inputJsonPath", default="test")
+    parser.add_argument('--targetPath', help="Directory target image folders", default="target")
+    parser.add_argument('--outputPath', help="Directory to write output data to", default="results")
+    parser.add_argument('--testJsonPath', help="Directory where test JSON will be stored", default="test")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
     parser.add_argument('--numThreads', type=int, default=1, help="Number of recognition threads to use")
 
