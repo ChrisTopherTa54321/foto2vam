@@ -41,6 +41,11 @@ class EncodedFace:
     def compare(self, otherFace):
         return face_recognition.face_distance([self._encodings], otherFace._encodings).mean()
 
+    def saveEncodings(self, filename):
+        outFile = open(filename, 'w')
+        for item in self._encodings:
+            print( item, file=outFile)
+
     def saveImage(self, filename, landmarks = True):
         if not self._img:
             raise Exception("Image was not saved in constructor!")
