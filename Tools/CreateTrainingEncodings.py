@@ -8,6 +8,7 @@ import argparse
 import glob
 import os
 import queue
+import fnmatch
 
 ###############################
 # Run the program
@@ -18,8 +19,11 @@ def main( args ):
         import pydevd
         pydevd.settrace(suspend=False)
     inputPath = args.inputPath
-    outputPath = args.outputPath
+    #outputPath = args.outputPath
     numThreads = args.numThreads
+    recursive = args.recursive
+    fileFilter = args.filter
+
     poolWorkQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
     if numThreads > 1:
@@ -32,15 +36,21 @@ def main( args ):
         pool = None
         doneEvent.set()
 
+
     # Read in all of the files from inputpath
-    for entry in glob.glob(inputPath): #os.path.join(inputPath, '*.png')):
-        fileName = "{}.encoding".format( os.path.splitext(os.path.basename(entry))[0])
-        outputFile = os.path.join( outputPath, fileName )
-        #print("{} -> {}".format(entry, outputFile))
-        if not os.path.exists(outputFile):
-            poolWorkQueue.put( (entry, outputFile ) )
-            if pool is None:
-                worker_process_func(0, poolWorkQueue, doneEvent, args)
+    for root, subdirs, files in os.walk(inputPath):
+        print("Entering directory {}".format(root))
+        for file in fnmatch.filter(files, fileFilter):
+            fileName = "{}.encoding".format( os.path.splitext(file)[0] )
+            inputFile = os.path.join(root, file )
+            outputFile = os.path.join( root, fileName )
+            if not os.path.exists(outputFile):
+                poolWorkQueue.put( (inputFile, outputFile ))
+                if pool is None:
+                    worker_process_func(0, poolWorkQueue, doneEvent, args)
+
+        if not recursive:
+            break
 
     print("Generator done!")
     doneEvent.set()
@@ -63,8 +73,7 @@ def worker_process_func(procId, workQueue, doneEvent, args):
             inputFile = work[0]
             outputFile = work[1]
             print("Worker thread {} to generate {}->{}".format(procId, inputFile,outputFile))
-            #try:
-            if True:
+            try:
                 image = Image.open(inputFile)
                 if normalizer:
                     image = normalizer.normalize(image)
@@ -73,8 +82,8 @@ def worker_process_func(procId, workQueue, doneEvent, args):
 
                 encodedFace = EncodedFace(image)
                 encodedFace.saveEncodings(outputFile)
-            #except:
-            #    print("Failed to generate {}".format(outputFile))
+            except:
+                print("Failed to generate {}".format(outputFile))
         except queue.Empty:
             pass
     print("Worker {} done!".format(procId))
@@ -85,7 +94,9 @@ def worker_process_func(procId, workQueue, doneEvent, args):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
     parser.add_argument('--inputPath', help="Directory containing images files to encode", required=True)
-    parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
+    parser.add_argument('--filter', help="File filter to process. Defaults to *.png", default="*.png")
+    #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
+    parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")
     parser.add_argument("--normalize", action='store_true', default=False, help="Perform image normalization")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")

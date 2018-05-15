@@ -42,8 +42,8 @@ def main( args ):
     faceCnt = 0;
     print( "Generating variations")
 
-    mutateChance = .2
-    mateChance = .5
+    mutateChance = .6
+    mateChance = .7
     faceVariants = [] + inputFaces
 
     while faceCnt < args.numFaces:
@@ -63,7 +63,7 @@ def main( args ):
     
             # Randomly apply mutations to the current face
             if shouldMutate:
-                mutate(newFace, random.randint(0,random.randint(1,10)) )
+                mutate(newFace, random.randint(0,random.randint(1,50)) )
                 
             newFace.save( os.path.join(outputPath, "face_variant_{}_{}.json".format(faceCnt, random.randint(0,99999))))
             faceVariants.append(newFace)

@@ -9,15 +9,14 @@ from win32api import GetKeyState
 from win32con import VK_CAPITAL, VK_SCROLL
 from Utils.Face.encoded import EncodedFace
 from Utils.Face.vam import VamFace
+import multiprocessing
+import queue
+import fnmatch
 
 # Set DPI Awareness  (Windows 10 and 8). Makes GetWindowRect return pxiel coordinates
 import ctypes
 errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
-#temp
-testJsonPath = None
-vamWindow = VamWindow()
-vamWindow.setClickLocations()
 
 ###############################
 # Run the program
@@ -31,75 +30,112 @@ def main( args ):
         pydevd.settrace(suspend=False)
 
     inputPath = args.inputJsonPath
-    outputPath = args.outputPath
-
+    #outputPath = args.outputPath
+    outputPath = "-"
     testJsonPath = args.testJsonPath
+    numThreads = args.numThreads
+    recursive = args.recursive
+    fileFilter = args.filter
 
 
     print( "Input path: {}\nOutput path: {}\n\n".format( inputPath, outputPath ) )
 
     # Initialize the Vam window
-    window = VamWindow()
+    vamWindow = VamWindow()
 
     # Locating the buttons via image comparison does not reliably work. These coordinates are the 'Window' coordinates
     # found via AutoHotKey's Window Spy, cooresponding to the Load Preset button and the location of the test file
-    window.setClickLocations([(130,39), (248,178)])
+    vamWindow.setClickLocations([(130,39), (248,178)])
 
-    evalNum = 0
+    print("Initializing worker processes...")
+    poolWorkQueue = multiprocessing.Queue(maxsize=200)
+    doneEvent = multiprocessing.Event()
+    if numThreads > 1:
+        pool = []
+        for idx in range(numThreads):
+            proc = multiprocessing.Process(target=worker_process_func, args=(idx, poolWorkQueue, doneEvent) )
+            proc.start()
+            pool.append( proc )
+    else:
+        pool = None
+        doneEvent.set()
+
+
     angles = [0, 35, 65]
-    face_images = {}
-    for entry in glob.glob(os.path.join(inputPath, '*.json')):
-        print("Processing {}".format(entry))
-        try:
-            alreadyDone = False
-            for angle in angles:
-                fileName = "{}_angle{}.png".format( os.path.splitext(os.path.basename(entry))[0], angle)
-                fileName = os.path.join( outputPath,fileName) 
-                if os.path.exists(fileName):
-                    alreadyDone = True
-                    print("Output file already exists. Skipping.")
-                    break
+    for root, subdirs, files in os.walk(inputPath):
+        print("Entering directory {}".format(root))
+        for file in fnmatch.filter(files, fileFilter):
+            print("Processing {}".format(file))
+            try:
+                alreadyDone = False
+                for angle in angles:
+                    fileName = "{}_angle{}.png".format( os.path.splitext(file)[0], angle)
+                    fileName = os.path.join( root,fileName)
+                    if os.path.exists(fileName):
+                        alreadyDone = True
+                        print("Output file already exists. Skipping.")
+                        break
 
-            if not alreadyDone:
-                inputFace = VamFace(entry)
-                face_images = evaluate_get_face_images(inputFace, angles)
-                for angle,face in face_images.items():
-                    fileName = "{}_angle{}.png".format( os.path.splitext(os.path.basename(entry))[0], angle)
-                    face.save( os.path.join( outputPath, fileName ))
-        except:
-            print("Failed to process {}".format(entry))
-        evalNum += 1
+                if alreadyDone:
+                    continue
 
+                if (GetKeyState(VK_CAPITAL) or GetKeyState(VK_SCROLL)):
+                    print("WARNING: Suspending script due to Caps Lock or Scroll Lock being on. Push CTRL+PAUSE/BREAK or mash CTRL+C to exit script.")
+                    while GetKeyState(VK_CAPITAL) or GetKeyState(VK_SCROLL):
+                        time.sleep(1)
 
+                # Get screenshots of face and submit them to worker threads
+                inputFile = os.path.join( root, file )
+                face = VamFace(inputFile)
+                for angle in angles:
+                    face.setRotation(angle)
+                    face.save( testJsonPath )
+                    vamWindow.loadLook()
+                    time.sleep(.3)
+                    img = vamWindow.getScreenShot()
+
+                    outputFileName = "{}_angle{}.png".format( os.path.splitext(os.path.basename(inputFile))[0], angle)
+                    outputFileName = os.path.join( root, outputFileName )
+                    poolWorkQueue.put( (img, outputFileName))
+
+                    if pool is None:
+                        worker_process_func(0, poolWorkQueue, doneEvent)
+            except:
+                print("Failed to process {}".format(file))
+
+        if not recursive:
+            break
+
+    print("Generator done!")
+    doneEvent.set()
 
 ###############################
-# Return images of the test faces
+# Worker function for helper processes
 ###############################
-def evaluate_get_face_images(face, angles):
-    global testJsonPath
-    global vamWindow
-    # Give the user a chance to interrupt the process before we hijack the mouse
-    if (GetKeyState(VK_CAPITAL) or GetKeyState(VK_SCROLL)):
-        print("WARNING: Suspending script due to Caps Lock or Scroll Lock being on. Push CTRL+PAUSE/BREAK or mash CTRL+C to exit script.")
-        while GetKeyState(VK_CAPITAL) or GetKeyState(VK_SCROLL):
-            time.sleep(1)
+def worker_process_func(procId, workQueue, doneEvent):
+    print("Worker {} started".format(procId))
+    normalizer = FaceNormalizer(256)
 
-    face_images = {}
-    for angle in angles:
-        face.setRotation(angle)
-        face.save( testJsonPath )
-        vamWindow.loadLook()
-        time.sleep(.3)
-        img = vamWindow.getScreenShot()
-
+    while not ( doneEvent.is_set() and workQueue.empty() ):
         try:
-            faceNormalizer = FaceNormalizer(256)
-            normalized = faceNormalizer.normalize(img)
-            face_images[angle] = normalized
-        except:
-            print( "Failed to locate face for angle {}".format(angle))
+            work = workQueue.get(block=True, timeout=1)
+            image = work[0]
+            outputFile = work[1]
+            print("Worker thread {} to generate {}".format(procId, outputFile))
 
-    return face_images
+            try:
+                try:
+                    image = normalizer.normalize(image)
+                except:
+                    if normalizer.lastRect:
+                        print( "Failed to find face, but last rect was {}".format(normalizer.lastRec))
+                image.save( outputFile )
+            except:
+                print("Failed to generate {}".format(outputFile))
+        except queue.Empty:
+            pass
+    print("Worker {} done!".format(procId))
+
 
 
 ###############################
@@ -108,9 +144,12 @@ def evaluate_get_face_images(face, angles):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate images for json" )
     parser.add_argument('--inputJsonPath', help="Directory containing json files to start with", required=True)
-    parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
+    parser.add_argument('--filter', help="File filter to process. Defaults to *.json", default="*.json")
+    #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument('--testJsonPath', help="Directory where test JSON will be stored", default="test")
+    parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
+    parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")
     return parser.parse_args()
 
 ###############################

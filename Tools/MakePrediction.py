@@ -46,7 +46,21 @@ def main( args ):
 
     for entry in glob.glob(inputGlob):
         try:
-            dataSet = numpy.array([numpy.loadtxt(entry, delimiter="\n")])
+            encodingFile = "{}_angle0.encoding".format( os.path.splitext(entry)[0])
+            encodingFile1 = "{}_angle35.encoding".format( os.path.splitext(entry)[0])
+            outArray = []
+            if os.path.exists(encodingFile) and os.path.exists(encodingFile1):
+                with open(encodingFile) as f:
+                    encoding = f.read().splitlines()
+                outArray = encoding
+
+                with open(encodingFile1) as f:
+                    encoding = f.read().splitlines()
+                outArray.extend(encoding)
+            else:
+                print("Missing encoding file {} or {}".format(encodingFile, encodingFile1))
+                
+            dataSet = numpy.array([outArray])
             predictions = model.predict(dataSet)
             rounded = [float(round(x,5)) for x in predictions[0]]
             face.importFloatList(rounded)
@@ -62,7 +76,7 @@ def main( args ):
             face.save( outputFile )
             print("Prediction saved to {}".format(outputFile))
         except Exception as e:
-            print("Failed to process {}: {}".format(entry, e.string()))
+            print("Failed to process {}: {}".format(entry, e))
     
 
 
