@@ -108,6 +108,9 @@ def main( args ):
 
     print("Generator done!")
     doneEvent.set()
+    if pool:
+        for proc in pool:
+            proc.join()
 
 ###############################
 # Worker function for helper processes

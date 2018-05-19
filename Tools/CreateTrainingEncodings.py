@@ -54,6 +54,9 @@ def main( args ):
 
     print("Generator done!")
     doneEvent.set()
+    if pool:
+        for proc in pool:
+            proc.join()
 
 
 
@@ -74,6 +77,9 @@ def worker_process_func(procId, workQueue, doneEvent, args):
             outputFile = work[1]
             print("Worker thread {} to generate {}->{}".format(procId, inputFile,outputFile))
             try:
+                if os.path.splitext(inputFile)[0].endswith("normalized"):
+                    print( "Skipping already normalized image" )
+                    continue
                 image = Image.open(inputFile)
                 if normalizer:
                     image = normalizer.normalize(image)
