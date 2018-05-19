@@ -7,4 +7,4 @@ deap
 opencv-python
 imutils
 keras
-tensorflow-gpu
+tensorflow
