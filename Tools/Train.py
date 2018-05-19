@@ -9,6 +9,7 @@ from keras.layers import Dense
 from keras.layers import Dropout
 from keras.layers import LeakyReLU
 from keras.initializers import RandomUniform
+from keras.optimizers import Adam
 import numpy
 import csv
 
@@ -58,6 +59,7 @@ def main( args ):
     outputSize = len(tmpFace.morphFloats)
     print( "{} : {}".format(inputSize, outputSize))
     dataSet = numpy.loadtxt(trainingCsv, delimiter=",")
+    #dataSet = dataSet[:int(len(dataSet)/1.5)]
     X=dataSet[:,0:inputSize]
     Y=dataSet[:,inputSize:]
 
@@ -75,7 +77,7 @@ def main( args ):
 
     print("Training...")
     while True:
-        model.fit(X,Y, epochs=50, batch_size=256, verbose=0)
+        model.fit(X,Y, epochs=25, batch_size=4096, verbose=0, shuffle=True)
         scores= model.evaluate(vX,vY, verbose=0)
         print("Saving progress... {}".format(scores))
         model.save(outputModelFile)
@@ -83,9 +85,9 @@ def main( args ):
 def generateModel( numInputs, numOutputs ):
     print("Generating a model with {} inputs and {} outputs".format(numInputs, numOutputs))
     model = Sequential()
-    layer1 = 10*numInputs
-    layer2 = 5*numInputs
-    layer3 = 3*numInputs
+    layer1 = 12*numInputs
+    layer2 = 8*numInputs
+    layer3 = 4*numInputs
     print("Layer 1: {}\nLayer 2: {}\nLayer 3: {}".format(layer1, layer2, layer3))
 
     model.add( Dense( layer1, input_dim=numInputs, kernel_initializer='RandomUniform' ) ) #, activation='relu' ))
@@ -94,10 +96,14 @@ def generateModel( numInputs, numOutputs ):
     model.add( Dense( layer2, kernel_initializer='RandomUniform' ) )#, activation='relu'))
     model.add( LeakyReLU() )
     model.add( Dropout(.5))
+    #model.add( Dense( layer2, kernel_initializer='RandomUniform' ) )#, activation='relu'))
+    #model.add( LeakyReLU() )
+    #model.add( Dropout(.5))
     model.add( Dense( layer3, kernel_initializer='RandomUniform' ) )#, activation='relu'))
     model.add( LeakyReLU())
     model.add( Dense( numOutputs, activation="linear" ) )
-    model.compile( loss='logcosh', optimizer='adam')
+    adam = Adam(lr=0.0005)
+    model.compile( loss='logcosh', optimizer=adam)
     #model.compile( loss='logcosh', optimizer='SGD')
 
     return model

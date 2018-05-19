@@ -18,7 +18,7 @@ def main( args ):
     inputPath = args.inputJsonPath
     basePath = args.baseJsonPath
     outputPath = args.outputPath
-
+    dirRotateInterval = args.rotateDirectoryInterval
     baseFace = VamFace( basePath )
     baseFace.trimToAnimatable()
 
@@ -45,7 +45,8 @@ def main( args ):
     mutateChance = .6
     mateChance = .7
     faceVariants = [] + inputFaces
-
+    nextRotation = faceCnt + dirRotateInterval
+    rotatedOutputPath = getNextDir( outputPath )
     while faceCnt < args.numFaces:
         #for face1 in faceVariants:
         face1 = faceVariants[random.randint(0,len(faceVariants)-1)]
@@ -60,16 +61,28 @@ def main( args ):
             if shouldMate:
                 mateIdx = random.randint(0, len(faceVariants)-1)
                 mate(newFace, faceVariants[mateIdx], random.randint(1, len(newFace.morphFloats)))
-    
+
             # Randomly apply mutations to the current face
             if shouldMutate:
                 mutate(newFace, random.randint(0,random.randint(1,50)) )
-                
-            newFace.save( os.path.join(outputPath, "face_variant_{}_{}.json".format(faceCnt, random.randint(0,99999))))
+
+            newFace.save( os.path.join(rotatedOutputPath, "face_variant_{}_{}.json".format(faceCnt, random.randint(0,99999))))
             faceVariants.append(newFace)
             faceCnt += 1
             if faceCnt % 500 == 0:
                 print( "{}/{}".format(faceCnt,args.numFaces) )
+            if faceCnt >= nextRotation:
+                nextRotation = faceCnt + dirRotateInterval
+                rotatedOutputPath = getNextDir( outputPath )
+
+
+def getNextDir( root ):
+    for i in range(9999):
+        nextDir = os.path.join(root, "{}".format(i))
+        if not os.path.exists(nextDir):
+            os.makedirs( nextDir )
+            return nextDir
+    raise Exception("Couldn't find unused directory!")
 
 
 def mutate(face, mutationCount):
@@ -93,6 +106,7 @@ def parseArgs():
     parser.add_argument('--baseJsonPath', help="JSON file with relevant morphs marked as Animatable", required=True)
     parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument('--numFaces', type=int, help="Number of faces to generate before stopping", default=10000 )
+    parser.add_argument("--rotateDirectoryInterval", type=int, default=1000, help="How often to rotate directories")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
 
