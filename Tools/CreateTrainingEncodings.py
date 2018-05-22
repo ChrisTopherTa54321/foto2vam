@@ -23,6 +23,7 @@ def main( args ):
     numThreads = args.numThreads
     recursive = args.recursive
     fileFilter = args.filter
+    debugPose = args.debugPose
 
     poolWorkQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
@@ -44,7 +45,11 @@ def main( args ):
             fileName = "{}.encoding".format( os.path.splitext(file)[0] )
             inputFile = os.path.join(root, file )
             outputFile = os.path.join( root, fileName )
-            if not os.path.exists(outputFile):
+
+            try:
+                # If this doesn't throw an exception, then we've already made this encoding
+                EncodedFace.createFromFile(outputFile)
+            except:
                 poolWorkQueue.put( (inputFile, outputFile ))
                 if pool is None:
                     worker_process_func(0, poolWorkQueue, doneEvent, args)
@@ -86,10 +91,13 @@ def worker_process_func(procId, workQueue, doneEvent, args):
                     fileName = "{}_normalized.png".format( os.path.splitext(inputFile)[0])
                     image.save( fileName)
 
-                encodedFace = EncodedFace(image)
+                encodedFace = EncodedFace(image, debugPose = args.debugPose )
+                if encodedFace.getAngle() < 0:
+                    print( "Mirroring image to face left")
+                    encodedFace = EncodedFace( image.transpose(Image.FLIP_LEFT_RIGHT), debugPose = args.debugPose )
                 encodedFace.saveEncodings(outputFile)
-            except:
-                print("Failed to generate {}".format(outputFile))
+            except Exception as e:
+                print("Failed to generate {} : {}".format(outputFile, str(e)))
         except queue.Empty:
             pass
     print("Worker {} done!".format(procId))
@@ -102,6 +110,7 @@ def parseArgs():
     parser.add_argument('--inputPath', help="Directory containing images files to encode", required=True)
     parser.add_argument('--filter', help="File filter to process. Defaults to *.png", default="*.png")
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
+    parser.add_argument("--debugPose", action='store_true', default=False, help="Display landmarks and pose on each image")
     parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")
     parser.add_argument("--normalize", action='store_true', default=False, help="Perform image normalization")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")

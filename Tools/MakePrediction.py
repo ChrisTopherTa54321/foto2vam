@@ -1,5 +1,6 @@
 # Generate training data from existing faces
 from Utils.Face.vam import VamFace
+from Utils.Face.encoded import EncodedFace
 import argparse
 import glob
 import os
@@ -50,13 +51,11 @@ def main( args ):
             encodingFile1 = "{}_angle35.encoding".format( os.path.splitext(entry)[0])
             outArray = []
             if os.path.exists(encodingFile) and os.path.exists(encodingFile1):
-                with open(encodingFile) as f:
-                    encoding = f.read().splitlines()
-                outArray = encoding
+                encodedFace = EncodedFace.createFromFile( encodingFile )
+                outArray = encodedFace.getEncodings()
 
-                with open(encodingFile1) as f:
-                    encoding = f.read().splitlines()
-                outArray.extend(encoding)
+                encodedFace = EncodedFace.createFromFile( encodingFile1 )
+                outArray.extend( encodedFace.getEncodings())
             else:
                 print("Missing encoding file {} or {}".format(encodingFile, encodingFile1))
                 

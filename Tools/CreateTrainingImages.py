@@ -61,7 +61,7 @@ def main( args ):
         doneEvent.set()
 
 
-    angles = [0, 35, 65]
+    angles = [0, 35]
     for root, subdirs, files in os.walk(inputPath):
         print("Entering directory {}".format(root))
         for file in fnmatch.filter(files, fileFilter):
