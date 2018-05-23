@@ -1,0 +1,8 @@
+cmake
+dlib
+face_recognition
+deap
+opencv-python
+imutils
+keras
+tensorflow
