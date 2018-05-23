@@ -1,3 +1,6 @@
 *.pyc
-*.jpg
+
+/Input/*.jpg
 /Output
+models/foto2vam.json
+models/foto2vam.model
