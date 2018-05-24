@@ -78,7 +78,7 @@ def main( args ):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
     parser.add_argument('--inputPath', help="Directory containing images", default="Input")
-    parser.add_argument('--modelPath', help="Path to model", default="models/foto2vam.model")
+    parser.add_argument('--modelPath', help="Path to model", default=os.path.join("models", "foto2vam.model") )
     parser.add_argument('--outputPath', help="Directory to store output", default="Output")
     #parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
