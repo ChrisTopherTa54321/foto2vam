@@ -71,7 +71,7 @@ def main( args ):
 def worker_process_func(procId, workQueue, doneEvent, args):
     print("Worker {} started".format(procId))
     if args.normalize:
-        normalizer = FaceNormalizer(256)
+        normalizer = FaceNormalizer(150)
     else:
         normalizer = None
 
