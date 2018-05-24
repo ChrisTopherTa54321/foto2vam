@@ -53,7 +53,7 @@ def main( args ):
     if numThreads > 1:
         pool = []
         for idx in range(numThreads):
-            proc = multiprocessing.Process(target=worker_process_func, args=(idx, poolWorkQueue, doneEvent) )
+            proc = multiprocessing.Process(target=worker_process_func, args=(idx, poolWorkQueue, doneEvent, args) )
             proc.start()
             pool.append( proc )
     else:
@@ -62,22 +62,24 @@ def main( args ):
 
 
     angles = [0, 35]
+    skipCnt = 0
     for root, subdirs, files in os.walk(inputPath):
         print("Entering directory {}".format(root))
         for file in fnmatch.filter(files, fileFilter):
-            print("Processing {}".format(file))
             try:
-                alreadyDone = False
+                anglesToProcess = [] + angles
                 for angle in angles:
                     fileName = "{}_angle{}.png".format( os.path.splitext(file)[0], angle)
                     fileName = os.path.join( root,fileName)
-                    if os.path.exists(fileName):
-                        alreadyDone = True
-                        print("Output file already exists. Skipping.")
-                        break
+                    if os.path.exists(fileName) or os.path.exists("{}.failed".format(fileName) ):
+                        anglesToProcess.remove(angle)
 
-                if alreadyDone:
+                if len(anglesToProcess) == 0:
+                    skipCnt += 1
+                    #print("Nothing to do for {}".format(file))
                     continue
+                print("Processing {} (after skipping {})".format(file, skipCnt))
+                skipCnt = 0
 
                 if (GetKeyState(VK_CAPITAL) or GetKeyState(VK_SCROLL)):
                     print("WARNING: Suspending script due to Caps Lock or Scroll Lock being on. Push CTRL+PAUSE/BREAK or mash CTRL+C to exit script.")
@@ -87,7 +89,7 @@ def main( args ):
                 # Get screenshots of face and submit them to worker threads
                 inputFile = os.path.join( root, file )
                 face = VamFace(inputFile)
-                for angle in angles:
+                for angle in anglesToProcess:
                     face.setRotation(angle)
                     face.save( testJsonPath )
                     vamWindow.loadLook()
@@ -115,26 +117,24 @@ def main( args ):
 ###############################
 # Worker function for helper processes
 ###############################
-def worker_process_func(procId, workQueue, doneEvent):
+def worker_process_func(procId, workQueue, doneEvent, args):
     print("Worker {} started".format(procId))
-    normalizer = FaceNormalizer(256)
+    normalizer = FaceNormalizer(args.normalizeSize)
 
     while not ( doneEvent.is_set() and workQueue.empty() ):
         try:
             work = workQueue.get(block=True, timeout=1)
             image = work[0]
             outputFile = work[1]
-            print("Worker thread {} to generate {}".format(procId, outputFile))
+            #print("Worker thread {} to generate {}".format(procId, outputFile))
 
             try:
-                try:
-                    image = normalizer.normalize(image)
-                except:
-                    if normalizer.lastRect:
-                        print( "Failed to find face, but last rect was {}".format(normalizer.lastRec))
+                image = normalizer.normalize(image)
                 image.save( outputFile )
+                print("Worker thread {} generated {}".format(procId, outputFile))
             except:
-                print("Failed to generate {}".format(outputFile))
+                print("Worker {} Failed to generate {}".format(procId, outputFile))
+                open( "{}.failed".format(outputFile), 'w' )
         except queue.Empty:
             pass
     print("Worker {} done!".format(procId))
@@ -148,6 +148,7 @@ def parseArgs():
     parser = argparse.ArgumentParser( description="Generate images for json" )
     parser.add_argument('--inputJsonPath', help="Directory containing json files to start with", required=True)
     parser.add_argument('--filter', help="File filter to process. Defaults to *.json", default="*.json")
+    parser.add_argument('--normalizeSize', type=int, help="Size of normalized output. Defaults to 500", default=500)
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument('--testJsonPath', help="Directory where test JSON will be stored", default="test")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")

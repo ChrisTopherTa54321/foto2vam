@@ -71,7 +71,7 @@ def main( args ):
 def worker_process_func(procId, workQueue, doneEvent, args):
     print("Worker {} started".format(procId))
     if args.normalize:
-        normalizer = FaceNormalizer(150)
+        normalizer = FaceNormalizer(args.normalizeSize)
     else:
         normalizer = None
 
@@ -109,6 +109,7 @@ def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
     parser.add_argument('--inputPath', help="Directory containing images files to encode", required=True)
     parser.add_argument('--filter', help="File filter to process. Defaults to *.png", default="*.png")
+    parser.add_argument('--normalizeSize', type=int, help="Size of normalized output. Defaults to 150", default=150)
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument("--debugPose", action='store_true', default=False, help="Display landmarks and pose on each image")
     parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")
