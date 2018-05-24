@@ -4,6 +4,8 @@ import glob
 from Utils.Vam.window import VamWindow
 from Utils.Face.normalize import FaceNormalizer
 from PIL import Image
+from PIL import ImageChops
+from PIL import ImageStat
 import time
 from win32api import GetKeyState
 from win32con import VK_CAPITAL, VK_SCROLL
@@ -12,6 +14,7 @@ from Utils.Face.vam import VamFace
 import multiprocessing
 import queue
 import fnmatch
+from collections import deque
 
 # Set DPI Awareness  (Windows 10 and 8). Makes GetWindowRect return pxiel coordinates
 import ctypes
@@ -63,6 +66,7 @@ def main( args ):
 
     angles = [0, 35]
     skipCnt = 0
+    screenshots = deque(maxlen=2)
     for root, subdirs, files in os.walk(inputPath):
         print("Entering directory {}".format(root))
         for file in fnmatch.filter(files, fileFilter):
@@ -85,7 +89,6 @@ def main( args ):
                     print("WARNING: Suspending script due to Caps Lock or Scroll Lock being on. Push CTRL+PAUSE/BREAK or mash CTRL+C to exit script.")
                     while GetKeyState(VK_CAPITAL) or GetKeyState(VK_SCROLL):
                         time.sleep(1)
-
                 # Get screenshots of face and submit them to worker threads
                 inputFile = os.path.join( root, file )
                 face = VamFace(inputFile)
@@ -93,17 +96,28 @@ def main( args ):
                     face.setRotation(angle)
                     face.save( testJsonPath )
                     vamWindow.loadLook()
-                    time.sleep(.3)
-                    img = vamWindow.getScreenShot()
+                    start = time.time()
 
+                    threshold = 750000000
+                    minTime = .3
+                    screenshots.append( vamWindow.getScreenShot() )
+
+                    while True:
+                        screenshots.append( vamWindow.getScreenShot() )
+                        diff = ImageChops.difference( screenshots[0], screenshots[1] )
+                        imageStat = ImageStat.Stat( diff )
+                        s = sum( imageStat.sum2 )
+                        # Todo: Calculate where blue box will be
+                        if s < threshold and diff.getpixel( (735, 573 ) ) == ( 0, 0, 0 ) and time.time() - start >= minTime:
+                            break
                     outputFileName = "{}_angle{}.png".format( os.path.splitext(os.path.basename(inputFile))[0], angle)
                     outputFileName = os.path.join( root, outputFileName )
-                    poolWorkQueue.put( (img, outputFileName))
+                    poolWorkQueue.put( ( screenshots.pop(), outputFileName))
 
                     if pool is None:
-                        worker_process_func(0, poolWorkQueue, doneEvent)
-            except:
-                print("Failed to process {}".format(file))
+                        worker_process_func(0, poolWorkQueue, doneEvent, args)
+            except Exception as e:
+                print("Failed to process {} - {}".format(file, str(e)))
 
         if not recursive:
             break
@@ -135,6 +149,7 @@ def worker_process_func(procId, workQueue, doneEvent, args):
             except:
                 print("Worker {} Failed to generate {}".format(procId, outputFile))
                 open( "{}.failed".format(outputFile), 'w' )
+                #image.save( "{}.failed.png".format(outputFile) )
         except queue.Empty:
             pass
     print("Worker {} done!".format(procId))
