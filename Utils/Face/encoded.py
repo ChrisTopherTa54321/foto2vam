@@ -12,14 +12,18 @@ class EncodedFace:
     ENCODING_TYPE = "dlib.face_recognition"
     ENCODING_VERSION = 1
 
-    def __init__(self, image, region=None, keepImg=False, imgPadding=125, debugPose = False):
+    def __init__(self, image, region=None, keepImg=False, imgPadding=125, num_jitters=2, debugPose = False):
         if image is None:
             return
 
         nImg = numpy.array(image)
 
         if region is None:
-            self._region = face_recognition.face_locations(nImg)[0]
+            try:
+                self._region = face_recognition.face_locations(nImg)[0]
+            except Exception as e:
+                raise Exception("Failed to find a face in the picture")
+
             # print("Face found at {}".format(self._region))
         else:
             self._region = _region
@@ -35,8 +39,11 @@ class EncodedFace:
         self._img = nImg[top:bottom, left:right]
 
         # Get encodings for the face in the image
-        self._encodings = face_recognition.face_encodings(self._img)[0]
-        self._landmarks = face_recognition.face_landmarks(self._img)[0]
+        try:
+            self._encodings = face_recognition.face_encodings(self._img, num_jitters=num_jitters)[0]
+            self._landmarks = face_recognition.face_landmarks(self._img)[0]
+        except:
+            raise Exception("Failed to find face in image")
         (_, self._angle, _) = self._estimatePose(self._img.shape[0:2], self._landmarks, debugPose = debugPose)
 
         if not keepImg:
@@ -48,8 +55,8 @@ class EncodedFace:
         data = open(fileName).read()
         jsonData = json.loads(data)
 
-        if jsonData["encoding_version"] is not self.ENCODING_VERSION:
-            raise Exception("Encoding version mismatch! File was {}, reader was {}".format(jsonData["encoding_version"], self.ENCODING_VERSION ) )
+        if jsonData["encoding_version"] is not EncodedFace.ENCODING_VERSION:
+            raise Exception("Encoding version mismatch! File was {}, reader was {}".format(jsonData["encoding_version"], EncodedFace.ENCODING_VERSION ) )
 
         newEncoding = EncodedFace( None )
         newEncoding._encodings = numpy.array(jsonData["encoding"])

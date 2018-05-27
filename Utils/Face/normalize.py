@@ -18,7 +18,7 @@ class FaceNormalizer:
         self._histogram = histogram
 
         if self._align:
-            self._aligner = FaceAligner( predictor=predictor)
+            self._aligner = FaceAligner( predictor=predictor, desiredFaceWidth = self._size)
         else:
             self._aligner = None
 

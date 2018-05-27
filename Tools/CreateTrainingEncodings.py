@@ -25,7 +25,7 @@ def main( args ):
     fileFilter = args.filter
     debugPose = args.debugPose
 
-    poolWorkQueue = multiprocessing.Queue()
+    poolWorkQueue = multiprocessing.Queue(maxsize=200)
     doneEvent = multiprocessing.Event()
     if numThreads > 1:
         pool = []
@@ -45,7 +45,9 @@ def main( args ):
             fileName = "{}.encoding".format( os.path.splitext(file)[0] )
             inputFile = os.path.join(root, file )
             outputFile = os.path.join( root, fileName )
-
+            if os.path.exists( "{}.failed".format(outputFile ) ) or     \
+               os.path.splitext(inputFile)[0].endswith("normalized"):
+                continue
             try:
                 # If this doesn't throw an exception, then we've already made this encoding
                 EncodedFace.createFromFile(outputFile)
@@ -80,11 +82,8 @@ def worker_process_func(procId, workQueue, doneEvent, args):
             work = workQueue.get(block=True, timeout=1)
             inputFile = work[0]
             outputFile = work[1]
-            print("Worker thread {} to generate {}->{}".format(procId, inputFile,outputFile))
+            #print("Worker thread {} to generate {}->{}".format(procId, inputFile,outputFile))
             try:
-                if os.path.splitext(inputFile)[0].endswith("normalized"):
-                    print( "Skipping already normalized image" )
-                    continue
                 image = Image.open(inputFile)
                 if normalizer:
                     image = normalizer.normalize(image)
@@ -92,12 +91,16 @@ def worker_process_func(procId, workQueue, doneEvent, args):
                     image.save( fileName)
 
                 encodedFace = EncodedFace(image, debugPose = args.debugPose )
+                mirrored = ""
                 if encodedFace.getAngle() < 0:
-                    print( "Mirroring image to face left")
+                    #print( "Mirroring image to face left")
+                    mirrored = "[mirrored]"
                     encodedFace = EncodedFace( image.transpose(Image.FLIP_LEFT_RIGHT), debugPose = args.debugPose )
                 encodedFace.saveEncodings(outputFile)
+                print("Worker {} generated {} {}".format(procId, outputFile, mirrored ) )
             except Exception as e:
-                print("Failed to generate {} : {}".format(outputFile, str(e)))
+                print("Worker {} failed to generate {} : {}".format(procId, outputFile, str(e)))
+                open( "{}.failed".format(outputFile), 'w' )
         except queue.Empty:
             pass
     print("Worker {} done!".format(procId))
@@ -110,6 +113,7 @@ def parseArgs():
     parser.add_argument('--inputPath', help="Directory containing images files to encode", required=True)
     parser.add_argument('--filter', help="File filter to process. Defaults to *.png", default="*.png")
     parser.add_argument('--normalizeSize', type=int, help="Size of normalized output. Defaults to 150", default=150)
+    parser.add_argument('--numJitters', type=int, help="Number of times to jitter each image. Defaults to 3, which is 3x slower than 1", default=3)
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument("--debugPose", action='store_true', default=False, help="Display landmarks and pose on each image")
     parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")

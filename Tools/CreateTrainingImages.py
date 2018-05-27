@@ -98,7 +98,7 @@ def main( args ):
                     vamWindow.loadLook()
                     start = time.time()
 
-                    threshold = 750000000
+                    threshold = 850000000
                     minTime = .3
                     screenshots.append( vamWindow.getScreenShot() )
 
@@ -108,8 +108,10 @@ def main( args ):
                         imageStat = ImageStat.Stat( diff )
                         s = sum( imageStat.sum2 )
                         # Todo: Calculate where blue box will be
-                        if s < threshold and diff.getpixel( (735, 573 ) ) == ( 0, 0, 0 ) and time.time() - start >= minTime:
+                        pix = diff.getpixel( (574, 582 ) )
+                        if s < threshold and sum(pix) < 50 and time.time() - start >= minTime:
                             break
+                        #print( "{} < {}: {}, {} {}".format(s, threshold, s < threshold, pix, sum(pix) ) )
                     outputFileName = "{}_angle{}.png".format( os.path.splitext(os.path.basename(inputFile))[0], angle)
                     outputFileName = os.path.join( root, outputFileName )
                     poolWorkQueue.put( ( screenshots.pop(), outputFileName))
