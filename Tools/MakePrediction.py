@@ -1,6 +1,6 @@
 # Generate training data from existing faces
+from Utils.Training.config import Config
 from Utils.Face.vam import VamFace
-from Utils.Face.encoded import EncodedFace
 import argparse
 import glob
 import os
@@ -17,66 +17,58 @@ def main( args ):
         import pydevd
         pydevd.settrace(suspend=False)
 
+    modelFile = args.modelFile
+    modelCfg = os.path.splitext(modelFile)[0] + ".json"
+    config = Config.createFromFile( modelCfg )
+    inputDir = args.inputDir
+    recursive = args.recursive
+    outputDir = args.outputDir
+
     # Delay heavy imports
     from keras.models import load_model
 
     # Work around low-memory GPU issue
     import tensorflow as tf
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    session = tf.Session(config=config)
+    tfconfig = tf.ConfigProto()
+    tfconfig.gpu_options.allow_growth = True
+    session = tf.Session(config=tfconfig)
 
-
-    modelFile = args.modelFile
-    inputGlob = args.inputEncoding
-    outputDir = args.outputDir
-    baseJson = args.baseJson
-    archiveDir = args.archiveDir
-
-    face = VamFace(baseJson)
-    face.trimToAnimatable()
     model = load_model(modelFile)
     modelName = os.path.splitext(os.path.basename(modelFile))[0]
-    
-    if archiveDir:
-        try:
-            os.makedirs(archiveDir)
-        except:
-            pass
-    
 
-    for entry in glob.glob(inputGlob):
-        try:
-            encodingFile = "{}_angle0.encoding".format( os.path.splitext(entry)[0])
-            encodingFile1 = "{}_angle35.encoding".format( os.path.splitext(entry)[0])
-            outArray = []
-            if os.path.exists(encodingFile) and os.path.exists(encodingFile1):
-                encodedFace = EncodedFace.createFromFile( encodingFile )
-                outArray = encodedFace.getEncodings()
+    face = config.getBaseFace()
+    # Read in all of the files from inputDir
+    for root, subdirs, files in os.walk(inputDir):
+        if len(files) > 0:
+            try:
+                relatedFiles = []
+                for file in files:
+                    relatedFiles.append( os.path.join(root, file ) )
 
-                encodedFace = EncodedFace.createFromFile( encodingFile1 )
-                outArray.extend( encodedFace.getEncodings())
-            else:
-                print("Missing encoding file {} or {}".format(encodingFile, encodingFile1))
-                
-            dataSet = numpy.array([outArray])
-            predictions = model.predict(dataSet)
-            rounded = [float(round(x,5)) for x in predictions[0]]
-            face.importFloatList(rounded)
-            entryName = os.path.splitext(os.path.basename(entry))[0]
-            outputFile = "{}_{}.json".format(entryName, modelName)
-            outputFile = os.path.join(outputDir, outputFile) 
-            if args.archiveDir and os.path.exists(outputFile):
-                dateString = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-                backupFileName = os.path.splitext(os.path.basename(outputFile))[0]
-                backupFileName = os.path.join( args.archiveDir, "{}_{}.json".format(backupFileName, dateString))
-                print("Backing up {} to {}".format(outputFile,backupFileName))
-                shutil.copyfile( outputFile, backupFileName)
-            face.save( outputFile )
-            print("Prediction saved to {}".format(outputFile))
-        except Exception as e:
-            print("Failed to process {}: {}".format(entry, e))
-    
+                outRow = config.generateParams( relatedFiles )
+                outShape = config.getShape()
+                dataSet = numpy.array([outRow[:outShape[0]]])
+                predictions = model.predict(dataSet)
+                rounded = [float(round(x,5)) for x in predictions[0]]
+                face.importFloatList(rounded)
+
+                outName = root.lstrip(inputDir)
+                outputFolder = os.path.join( outputDir, outName )
+                try:
+                    os.makedirs(outputFolder)
+                except:
+                    pass
+                folderName = os.path.split(root)[-1]
+                outputFullPath = os.path.join( outputFolder, "{}_{}.json".format(folderName, modelName))
+                face.save( outputFullPath )
+                print( "Generated {}".format(outputFullPath) )
+            except Exception as e:
+                print( "Failed to generate model from {} - {}".format(root, str(e) ) )
+
+        if not args.recursive:
+            break
+
+
 
 
 ###############################
@@ -85,9 +77,8 @@ def main( args ):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate a VaM model from a face encoding" )
     parser.add_argument('--modelFile', help="Model to use for predictions", required=True)
-    parser.add_argument('--inputEncoding', help="Encoding to use for input to model. Supports wildcard", required=True)
-    parser.add_argument('--archiveDir', help="Backup old outputFile files to directory first")
-    parser.add_argument('--baseJson', help="Base VaM file", required=True)
+    parser.add_argument('--inputDir', help="Directory containing input encodings", required=True)
+    parser.add_argument("--recursive", action='store_true', default=False, help="Iterate to subdirectories of input path")
     parser.add_argument('--outputDir', help="Output VaM files directory", required=True)
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 

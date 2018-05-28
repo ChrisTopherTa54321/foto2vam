@@ -25,51 +25,14 @@ def main( args ):
     print( "Processing images from {} and using model/json {}/{}".format(inputPath, modelPath, jsonPath))
 
     print( "First running CreateTrainingEncodings tool")
-    params = argparse.Namespace(inputPath=inputPath, filter="*.png", normalize=True, numThreads=4, pydev=False, recursive=False)
+    params = argparse.Namespace(inputPath=inputPath, filter="*.png,*.jpg", normalizeSize=150, normalize=True, numJitters=10, numThreads=4, pydev=False, recursive=True, debugPose = False)
     encodings.main( params )
 
-    tempPath = "temp"
-    print( "Moving encodings to temporary directory" )
-    try:
-        os.makedirs(  tempPath )
-    except:
-        pass
-    
-    try:
-        os.makedirs( outputPath )
-    except:
-        pass
-
-    for file in glob.glob( os.path.join( inputPath, "*.encoding" ) ):
-        try:
-            shutil.move( file, os.path.join( tempPath, os.path.basename(file) ) )
-        except:
-            print("Error moving {}".format(file))
-
-    print( "Generating .face marker files" )
-    for file in glob.glob( os.path.join( tempPath, "*angle0.encoding" ) ):
-        try:
-            baseName = os.path.basename(file).split("_angle0")[0]
-            angle0 = baseName + "_angle0.encoding"
-            angle35 = baseName + "_angle35.encoding"
-
-            angle0 = os.path.join( tempPath, angle0 )
-            angle35 = os.path.join( tempPath, angle35 )
-            if os.path.exists(angle0) and os.path.exists(angle35):
-                open( os.path.join( tempPath, baseName + ".face" ), "w" )
-            else:
-                print( "Couldn't find both angle encodings for {}".format(baseName))
-        except:
-            print( "Error processing {}".format(file))
-            
     print( "Running MakePredictions tool")
-    params = argparse.Namespace(modelFile=modelPath, inputEncoding=os.path.join(tempPath, "*.face"), baseJson=jsonPath, pydev=False, outputDir=outputPath, archiveDir=None )
+    params = argparse.Namespace(modelFile=modelPath, inputDir=inputPath, pydev=False, outputDir=outputPath, recursive=True )
     predictor.main(params)
     
-    try:
-        os.removedirs(tempPath)
-    except:
-        pass
+    
 
 
 ###############################

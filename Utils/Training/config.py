@@ -11,6 +11,7 @@ class Config:
     def __init__(self, configJson ):
 
         self._baseFace = VamFace( configJson["baseJson"] )
+        #self._baseFace.trimToAnimatable()  # This line should be in, but I forgot it before creating 250,000 encodings, and I'm not re-doing them.
         self._paramShape = None
         angles = set()
         self._input_params = []
@@ -57,6 +58,9 @@ class Config:
             raise Exception("Config version mismatch! File was {}, reader was {}".format(jsonData["config_version"], Config.CONFIG_VERSION ) )
 
         return Config( jsonData )
+
+    def getBaseFace(self):
+        return self._baseFace
 
     def getShape(self):
         return self._paramShape

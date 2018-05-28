@@ -54,7 +54,7 @@ class ParamGenerator:
         return outArray
 
     def _jsonParams(self, params):
-        averages = None
+        averages = []
         for face in self._vamFaces:
             if not averages:
                 averages = [0] * len(face.morphFloats)

@@ -22,7 +22,7 @@ def main( args ):
     #outputPath = args.outputPath
     numThreads = args.numThreads
     recursive = args.recursive
-    fileFilter = args.filter
+    fileFilter = args.filter.split(',')
     debugPose = args.debugPose
 
     poolWorkQueue = multiprocessing.Queue(maxsize=200)
@@ -41,20 +41,21 @@ def main( args ):
     # Read in all of the files from inputpath
     for root, subdirs, files in os.walk(inputPath):
         print("Entering directory {}".format(root))
-        for file in fnmatch.filter(files, fileFilter):
-            fileName = "{}.encoding".format( os.path.splitext(file)[0] )
-            inputFile = os.path.join(root, file )
-            outputFile = os.path.join( root, fileName )
-            if os.path.exists( "{}.failed".format(outputFile ) ) or     \
-               os.path.splitext(inputFile)[0].endswith("normalized"):
-                continue
-            try:
-                # If this doesn't throw an exception, then we've already made this encoding
-                EncodedFace.createFromFile(outputFile)
-            except:
-                poolWorkQueue.put( (inputFile, outputFile ))
-                if pool is None:
-                    worker_process_func(0, poolWorkQueue, doneEvent, args)
+        for filter in fileFilter:
+            for file in fnmatch.filter(files, filter):
+                fileName = "{}.encoding".format( os.path.splitext(file)[0] )
+                inputFile = os.path.join(root, file )
+                outputFile = os.path.join( root, fileName )
+                if os.path.exists( "{}.failed".format(outputFile ) ) or     \
+                   os.path.splitext(inputFile)[0].endswith("normalized"):
+                    continue
+                try:
+                    # If this doesn't throw an exception, then we've already made this encoding
+                    EncodedFace.createFromFile(outputFile)
+                except:
+                    poolWorkQueue.put( (inputFile, outputFile ))
+                    if pool is None:
+                        worker_process_func(0, poolWorkQueue, doneEvent, args)
 
         if not recursive:
             break
@@ -111,7 +112,7 @@ def worker_process_func(procId, workQueue, doneEvent, args):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
     parser.add_argument('--inputPath', help="Directory containing images files to encode", required=True)
-    parser.add_argument('--filter', help="File filter to process. Defaults to *.png", default="*.png")
+    parser.add_argument('--filter', help="File filter to process. Defaults to \"*.png,*.jpg\"", default="*.png,*.jpg")
     parser.add_argument('--normalizeSize', type=int, help="Size of normalized output. Defaults to 150", default=150)
     parser.add_argument('--numJitters', type=int, help="Number of times to jitter each image. Defaults to 3, which is 3x slower than 1", default=3)
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
