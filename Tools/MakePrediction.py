@@ -53,6 +53,8 @@ def main( args ):
                 face.importFloatList(rounded)
 
                 outName = root.lstrip(inputDir)
+                outName = outName.lstrip('/')
+                outName = outName.lstrip('\\')
                 outputFolder = os.path.join( outputDir, outName )
                 try:
                     os.makedirs(outputFolder)
