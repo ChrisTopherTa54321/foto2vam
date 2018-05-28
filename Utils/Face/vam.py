@@ -1,6 +1,7 @@
 # Class to manipulate a VAM face
 import json
 import random
+import copy
 
 class VamFace:
     wHndl = 0
@@ -8,7 +9,7 @@ class VamFace:
 
     # Initialize a base face from a JSON file
     # Get minimum and maximum values for parameters from minFace and maxFace files
-    def __init__(self, baseFileName, minFileName = None, maxFileName = None):
+    def __init__(self, baseFileName, minFileName = None, maxFileName = None, discardExtra = True):
         self.jsonData = {}
 
         # reference to the 'morphs' in the json
@@ -23,7 +24,7 @@ class VamFace:
         # valid ranges for each morph value
         self.morphInfo = []
 
-        self.load( baseFileName )
+        self.load( baseFileName, discardExtra = discardExtra )
 
         self.minFace = VamFace( minFileName ) if not minFileName is None else None
         self.maxFace = VamFace( maxFileName ) if not maxFileName is None else None
@@ -52,8 +53,32 @@ class VamFace:
             self.morphInfo.append( { 'min': minVal, 'max': maxVal, 'name': morph['name'] } )
 
 
+    @staticmethod
+    def mergeFaces( templateFace, fromFace, toFace ):
+        # Create a copy of 'fromFace' that only contains morphs to copy
+        scratchFromFace = copy.deepcopy( fromFace )
+        scratchFromFace.matchMorphs( templateFace )
+        scratchToFace = copy.deepcopy( toFace )
+
+        # ScratchFromFace contains only the values we want to copy
+        # scratchToFace contains the face to copy to.
+        # Now, overwrite scratchToFace parameters with ScratchFromFace params
+
+        for otherMorph in scratchFromFace.morphs:
+            morph = scratchToFace._getMorph(otherMorph['name'])
+            if not morph:
+                scratchToFace.morphs.append( otherMorph )
+            else:
+                morph = otherMorph
+
+        scratchToFace.morphsContainer['morphs'] = scratchToFace.morphs
+        scratchToFace.morphs = scratchToFace.morphsContainer['morphs']
+        scratchToFace._createMorphFloats()
+        return scratchToFace
+
+
     # Discard morphs in this face that are not in otherFace. Aligns morphFloats between the two faces.
-    def matchMorphs(self, otherFace):
+    def matchMorphs(self, otherFace, copyUnknowns = False):
         newMorphs = []
         self.updateJson()
 
@@ -64,7 +89,8 @@ class VamFace:
             if not morph:
                 # If we didn't have a value for the morph in the other face, then set to 0
                 morph = otherMorph.copy()
-                morph['value'] = 0
+                if not copyUnknowns:
+                    morph['value'] = 0
             newMorphs.append(morph)
 
         self.morphsContainer['morphs'] = newMorphs
@@ -84,7 +110,7 @@ class VamFace:
         self._createMorphFloats()
 
     # Load a JSON file
-    def load(self, filename):
+    def load(self, filename, discardExtra = True ):
             data = open(filename).read()
             self.jsonData = json.loads(data)
             storables = self.jsonData["atoms"][0]["storables"]
@@ -96,38 +122,39 @@ class VamFace:
             self.morphsContainer = storable[0]
             self.morphs = self.morphsContainer['morphs']
 
-            # Try to normalize the face pose
-            self.morphsContainer["hair"] = "No Hair"
-            self.morphsContainer["clothing"] = []
-            self.morphsContainer["character"] = "Female 1"
+            if discardExtra:
+                # Try to normalize the face pose
+                self.morphsContainer["hair"] = "No Hair"
+                self.morphsContainer["clothing"] = []
+                self.morphsContainer["character"] = "Female 1"
 
-            storable = list(filter(lambda x : x['id'] == "rescaleObject", storables))
-            if len(storable) > 0:
-                storable[0]["scale"] = 1.0
+                storable = list(filter(lambda x : x['id'] == "rescaleObject", storables))
+                if len(storable) > 0:
+                    storable[0]["scale"] = 1.0
 
-            storable = list(filter(lambda x : x['id'] == "EyelidControl", storables))
-            if len(storable) > 0:
-                storable[0]["blinkEnabled"] = "false"
-            else:
-                newNode = {
-                          "id" : "EyelidControl",
-                          "blinkEnabled" : "false"
-                          }
-                storables.append(newNode)
+                storable = list(filter(lambda x : x['id'] == "EyelidControl", storables))
+                if len(storable) > 0:
+                    storable[0]["blinkEnabled"] = "false"
+                else:
+                    newNode = {
+                              "id" : "EyelidControl",
+                              "blinkEnabled" : "false"
+                              }
+                    storables.append(newNode)
 
-            storable = list(filter(lambda x : x['id'] == "AutoExpressions", storables))
-            if len(storable) > 0:
-                storable[0]["enabled"] = "false"
-            else:
-                newNode = {
-                          "id" : "AutoExpressions",
-                          "enabled" : "false"
-                          }
-                storables.append(newNode)
+                storable = list(filter(lambda x : x['id'] == "AutoExpressions", storables))
+                if len(storable) > 0:
+                    storable[0]["enabled"] = "false"
+                else:
+                    newNode = {
+                              "id" : "AutoExpressions",
+                              "enabled" : "false"
+                              }
+                    storables.append(newNode)
 
-            storable = list(filter(lambda x : x['id'] == "JawControl", storables))
-            if len(storable) > 0:
-                storable[0]["targetRotationX"] = 0
+                storable = list(filter(lambda x : x['id'] == "JawControl", storables))
+                if len(storable) > 0:
+                    storable[0]["targetRotationX"] = 0
 
 
             # Find the head rotation value in the json
