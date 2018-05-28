@@ -22,12 +22,22 @@ def main( args ):
     # Read in all of the files from inputpath
     outFile = open(outputFile, 'w')
     #writer = csv.writer( outFile, lineterminator='\n')
+    commentLine = None
     for root, subdirs, files in os.walk(inputPath):
         print("Entering directory {}".format(root))
         for file in fnmatch.filter(files, fileFilter):
             print("Reading {}".format(file))
-            with open( os.path.join(root, file) ) as f:
+            csvInputFile = os.path.join(root, file)
+            with open( csvInputFile ) as f:
                 for line in f:
+                    if line.startswith("#"):
+                        if commentLine is None:
+                            commentLine = line
+                        else:
+                            if commentLine != line:
+                                print("Header mismatch in {}! Got {}, expected {}".format(csvInputFile, line, commentLine ) )
+                                break
+                            continue # skip comment lines (except header comment)
                     outFile.write(line)
 
         if not recursive:

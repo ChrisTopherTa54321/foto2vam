@@ -1,8 +1,8 @@
 # Generate training data from existing faces
-from Utils.Face.vam import VamFace
 import argparse
-import glob
 import os
+import numpy
+
 from keras.models import load_model
 from keras.models import Sequential
 from keras.layers import Dense
@@ -10,28 +10,12 @@ from keras.layers import Dropout
 from keras.layers import LeakyReLU
 from keras.initializers import RandomUniform
 from keras.optimizers import Adam
-import numpy
-import csv
-
 
 # Work around low-memory GPU issue
 import tensorflow as tf
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
-
-#numpy.random.seed(7)
-
-
-# class LossHistory(keras.callbacks.Callback):
-#     def on_train_begin(self, logs={}):
-#         self.losses = []
-#
-#     def on_batch_end(self, batch, logs={}):
-#         self.losses.append(logs.get('loss'))
-#
-#     def on_epoch_end(self, epoch, logs={} ):
-#         print( " )
 
 ###############################
 # Run the program
@@ -45,29 +29,33 @@ def main( args ):
     validationCsv = args.validationCsv
     trainingCsv = args.trainingCsv
     outputModelFile = args.outputFile
-    sampleJson = args.sampleJson
 
+    # First read parameters from trainingCsv and validation, ensure they match
+    trainingParams = open(trainingCsv).readline()
+    validationParams = open(validationCsv).readline()
 
-    encodingFile = "{}_angle0.encoding".format( os.path.splitext(sampleJson)[0])
-    if not ( os.path.exists(encodingFile)):
-        raise Exception("Sample json didn't have an angle0 encoding!")
-    tmpFace = VamFace(sampleJson)
-    with open(encodingFile) as f:
-        encoding = f.read().splitlines()
+    if trainingParams != validationParams:
+        print("Training CSV mismatches Validation CSV! [{}] vs [{}]".format( trainingParams, validationParams ) )
 
-    inputSize = 2*len(encoding)
-    outputSize = len(tmpFace.morphFloats)
-    print( "{} : {}".format(inputSize, outputSize))
-    dataSet = numpy.loadtxt(trainingCsv, delimiter=",")
-    #dataSet = dataSet[:int(len(dataSet)/1.5)]
-    X=dataSet[:,0:inputSize]
-    Y=dataSet[:,inputSize:]
+    trainingParams = trainingParams.lstrip('#')
+    trainingParams = trainingParams.split(',')
+    configFile = trainingParams[0]
+    inputSize = int(trainingParams[1])
+    outputSize = int(trainingParams[2])
 
-    dataSet = numpy.loadtxt(validationCsv, delimiter=",")
+    print( "Using {} with {} inputs and {} outputs".format(configFile, inputSize, outputSize ))
+
+    print( "Reading validation set...")
+    dataSet = numpy.loadtxt(validationCsv, delimiter=',', comments='#')
     vX=dataSet[:,0:inputSize]
     vY=dataSet[:,inputSize:]
+    print("Validation Dataset: {}\nX: {}\nY: {}\n".format(dataSet.shape, vX.shape, vY.shape))
 
-    print("Dataset: {}\nX: {}\nY: {}\n".format(dataSet.shape, X.shape, Y.shape))
+    print( "Reading training set..." )
+    dataSet = numpy.loadtxt(trainingCsv, delimiter=',', comments='#')
+    X=dataSet[:,0:inputSize]
+    Y=dataSet[:,inputSize:]
+    print("Training Dataset: {}\nX: {}\nY: {}\n".format(dataSet.shape, X.shape, Y.shape))
 
     if os.path.exists(outputModelFile):
         print("Loading existing model")
@@ -116,7 +104,6 @@ def parseArgs():
     parser.add_argument('--trainingCsv', help="Path to training CSV", required=True)
     parser.add_argument('--validationCsv', help="Path to training containing validation JSON and encoding files", required=True)
     parser.add_argument('--outputFile', help="File to write output model to")
-    parser.add_argument('--sampleJson', help="Just a json file to get the model size from")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
 
