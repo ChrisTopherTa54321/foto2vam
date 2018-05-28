@@ -1,11 +1,13 @@
 # Generate training data from existing faces
 from Utils.Face.vam import VamFace
+from Utils.Training.config import Config
 import argparse
 import glob
 import os
 import numpy
 import csv
 import fnmatch
+import time
 
 ###############################
 # Run the program
@@ -18,46 +20,40 @@ def main( args ):
 
     inputPath = args.inputPath
     outputName = args.outputName
+    config = Config.createFromFile( args.configFile )
 
-
-    face = None
-    encoding = None
+    start = time.time()
+    numCreated = 0
     for root, subdirs, files in os.walk(inputPath):
         outCsvFile = os.path.join(root,outputName)
         outFile = None
+
         print( "Entering {}".format(root))
         for file in fnmatch.filter(files, '*.json'):
+            try:
+                basename = os.path.splitext(file)[0]
+                # Check if we have all support encodings for this json
+                relatedFiles = []
+                for rfile in fnmatch.filter(files, '{}*'.format(basename)):
+                    relatedFiles.append( os.path.join(root, rfile ) )
 
-            # Check if we have all support encodings for this json
-            basename = os.path.splitext(file)[0]
-            encodingFiles = [ "{}_angle0.encoding".format( basename )
-                            , "{}_angle35.encoding".format( basename ) ]
+                # Have all files? Convert them to CSV
 
-            hasAllFiles = True
-            for idx,encodingFile in enumerate(encodingFiles):
-                encodingFile = os.path.join(root, encodingFile)
-                encodingFiles[idx] = encodingFile
-                if not os.path.exists( encodingFile ):
-                    hasAllFiles = False
-                    break
+                outRow = config.generateParams( relatedFiles )
+                if outFile is None:
+                    print( "Creating {}".format(outCsvFile))
+                    outFile = open( outCsvFile, 'w' )
+                    writer = csv.writer( outFile, lineterminator='\n')
+                    shape = config.getShape()
+                    print( "#{},{},{}".format( args.configFile, shape[0], shape[1] ), file=outFile )
+                writer.writerow( outRow )
+                numCreated += 1
 
-            if not hasAllFiles:
-                print("Skipping {} since it does not have all encoding files".format(file))
-                continue
+                if numCreated % 100 == 0:
+                    print( "Processed {} entries ({} s/entry)".format(numCreated, ( time.time() - start ) / numCreated ))
 
-            # Have all encodings? Read them in
-            outArray = []
-            for encodingFile in encodingFiles:
-                encoding = open(encodingFile).read().splitlines()
-                outArray.extend(encoding)
-
-            face = VamFace(os.path.join(root,file))
-            outArray.extend(face.morphFloats)
-            if outFile is None:
-                print( "Creating {}".format(outCsvFile))
-                outFile = open( outCsvFile, 'w' )
-            writer = csv.writer( outFile, lineterminator='\n')
-            writer.writerow( outArray )
+            except Exception as e:
+                print( "Failed to generate CSV from {} - {}".format( file, str(e)))
 
         if not args.recursive:
             # Don't go any further down if not recursive!
@@ -69,6 +65,7 @@ def main( args ):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
     parser.add_argument('--inputPath', help="Directory containing JSON and encoding files", required=True)
+    parser.add_argument('--configFile', help="File with training data generation parameters", required=True)
     parser.add_argument("--recursive", action='store_true', default=False, help="Iterate to subdirectories of input path")
     parser.add_argument("--outputName", help="Name of CSV file to create in each directory")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")

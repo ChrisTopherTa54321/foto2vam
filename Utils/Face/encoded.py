@@ -185,6 +185,9 @@ class EncodedFace:
     def getEncodings(self):
         return self._encodings.tolist()
 
+    def getLandmarks(self):
+        return self._landmarks
+
     def getRegion(self):
         return self._region
 
