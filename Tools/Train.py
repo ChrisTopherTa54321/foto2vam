@@ -7,6 +7,7 @@ from keras.models import load_model
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Dropout
+from keras.layers import BatchNormalization
 from keras.layers import LeakyReLU
 from keras.initializers import RandomUniform
 from keras.optimizers import Adam
@@ -65,7 +66,7 @@ def main( args ):
 
     print("Training...")
     while True:
-        model.fit(X,Y, epochs=25, batch_size=4096, verbose=0, shuffle=True)
+        model.fit(X,Y, epochs=25, batch_size=8192, verbose=0, shuffle=True)
         scores= model.evaluate(vX,vY, verbose=0)
         print("Saving progress... {}".format(scores))
         model.save(outputModelFile)
@@ -80,9 +81,11 @@ def generateModel( numInputs, numOutputs ):
 
     model.add( Dense( layer1, input_dim=numInputs, kernel_initializer='RandomUniform' ) ) #, activation='relu' ))
     model.add( LeakyReLU() )
+    model.add( BatchNormalization() )
     model.add( Dropout(.5))
     model.add( Dense( layer2, kernel_initializer='RandomUniform' ) )#, activation='relu'))
     model.add( LeakyReLU() )
+    model.add( BatchNormalization() )
     model.add( Dropout(.5))
     #model.add( Dense( layer2, kernel_initializer='RandomUniform' ) )#, activation='relu'))
     #model.add( LeakyReLU() )

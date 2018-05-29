@@ -12,10 +12,10 @@ import shutil
 # Run the program
 #
 def main( args ):
-    #if args.pydev:
-    #    print("Enabling debugging with pydev")
-    #    import pydevd
-    #    pydevd.settrace(suspend=False)
+    if args.pydev:
+        print("Enabling debugging with pydev")
+        import pydevd
+        pydevd.settrace(suspend=False)
 
     inputPath = args.inputPath
     modelPath = args.modelPath
@@ -29,7 +29,7 @@ def main( args ):
     encodings.main( params )
 
     print( "Running MakePredictions tool")
-    params = argparse.Namespace(modelFile=modelPath, inputDir=inputPath, pydev=False, outputDir=outputPath, recursive=True )
+    params = argparse.Namespace(modelFile=modelPath, inputDir=inputPath, pydev=False, outputDir=outputPath, multiDir=False, skipChance=0.0, recursive=True )
     predictor.main(params)
     
     
@@ -43,7 +43,7 @@ def parseArgs():
     parser.add_argument('--inputPath', help="Directory containing images", default="Input")
     parser.add_argument('--modelPath', help="Path to model", default=os.path.join("models", "foto2vam.model") )
     parser.add_argument('--outputPath', help="Directory to store output", default="Output")
-    #parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
+    parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
     return parser.parse_args()
 

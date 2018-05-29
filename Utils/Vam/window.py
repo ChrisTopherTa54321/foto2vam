@@ -15,7 +15,8 @@ def _rect2xywh(rect):
 class VamWindow:
     _wHndl = 0
 
-    def __init__(self):
+    def __init__(self, idx = 0 ):
+        self._idx = idx
         self._getVamHndl()
 
         self._clickLocations = None
@@ -25,7 +26,13 @@ class VamWindow:
 
     def _getVamHndl(self):
         if not win32gui.IsWindow(self._wHndl):
-            self._wHndl = win32gui.FindWindow(0, "VaM")
+            def callback(hwnd, hwnds):
+                if win32gui.GetWindowText(hwnd) == "VaM":
+                    hwnds.append(hwnd)
+
+            hwnds = []
+            win32gui.EnumWindows( callback, hwnds )
+            self._wHndl = hwnds[self._idx]
         return self._wHndl
 
 

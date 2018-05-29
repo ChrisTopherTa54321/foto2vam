@@ -44,7 +44,7 @@ def main( args ):
     print( "Input path: {}\nOutput path: {}\n\n".format( inputPath, outputPath ) )
 
     # Initialize the Vam window
-    vamWindow = VamWindow()
+    vamWindow = VamWindow( idx = args.vamWindow )
 
     # Locating the buttons via image comparison does not reliably work. These coordinates are the 'Window' coordinates
     # found via AutoHotKey's Window Spy, cooresponding to the Load Preset button and the location of the test file
@@ -169,6 +169,7 @@ def parseArgs():
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument('--testJsonPath', help="Directory where test JSON will be stored", default="test")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")
+    parser.add_argument("--vamWindow", type=int, default=0, help="Index of VaM window to use")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
     parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")
     return parser.parse_args()

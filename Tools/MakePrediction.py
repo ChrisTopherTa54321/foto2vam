@@ -1,12 +1,9 @@
 # Generate training data from existing faces
 from Utils.Training.config import Config
-from Utils.Face.vam import VamFace
 import argparse
-import glob
 import os
-import shutil
 import numpy
-import datetime
+import random
 
 ###############################
 # Run the program
@@ -23,6 +20,7 @@ def main( args ):
     inputDir = args.inputDir
     recursive = args.recursive
     outputDir = args.outputDir
+    multiDir = args.multiDir
 
     # Delay heavy imports
     from keras.models import load_model
@@ -35,15 +33,29 @@ def main( args ):
 
     model = load_model(modelFile)
     modelName = os.path.splitext(os.path.basename(modelFile))[0]
+    baseName = ""
 
     face = config.getBaseFace()
     # Read in all of the files from inputDir
     for root, subdirs, files in os.walk(inputDir):
-        if len(files) > 0:
+        for file in files:
             try:
+                skipSample = random.random() < args.skipChance 
                 relatedFiles = []
-                for file in files:
-                    relatedFiles.append( os.path.join(root, file ) )
+                if multiDir:
+                    if skipSample: 
+                        continue
+                    if not file.endswith(".json"):
+                        continue
+                    baseName = os.path.splitext( file )[0]
+                    for rfile in filter( lambda x: x.startswith(baseName), files ):
+                        relatedFiles.append(  os.path.join(root,rfile ) )
+                else:
+                    if skipSample:
+                        break
+                    for rfile in files:
+                        relatedFiles.append( os.path.join(root, rfile ) )
+
 
                 outRow = config.generateParams( relatedFiles )
                 outShape = config.getShape()
@@ -60,12 +72,22 @@ def main( args ):
                     os.makedirs(outputFolder)
                 except:
                     pass
-                folderName = os.path.split(root)[-1]
+
+                # In multiDir, the 'folder' is the baseName of the file
+                if multiDir:
+                    folderName = baseName
+                else:
+                    folderName = os.path.split(root)[-1]
+
                 outputFullPath = os.path.join( outputFolder, "{}_{}.json".format(folderName, modelName))
                 face.save( outputFullPath )
                 print( "Generated {}".format(outputFullPath) )
             except Exception as e:
                 print( "Failed to generate model from {} - {}".format(root, str(e) ) )
+
+            # If not multiDir then we've already processed all of the files
+            if not multiDir:
+                break
 
         if not args.recursive:
             break
@@ -82,6 +104,8 @@ def parseArgs():
     parser.add_argument('--inputDir', help="Directory containing input encodings", required=True)
     parser.add_argument("--recursive", action='store_true', default=False, help="Iterate to subdirectories of input path")
     parser.add_argument('--outputDir', help="Output VaM files directory", required=True)
+    parser.add_argument("--multiDir", action='store_true', default=False, help="Allow multiple predictions per directory. Assume supporting files start with json files name")
+    parser.add_argument("--skipChance", type=float, default=0.0, help="Chance to skip generating a model. Used for training set sampling. Defaults to 0.0")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
 
