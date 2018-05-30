@@ -14,6 +14,7 @@ def main( args ):
         pydevd.settrace(suspend=False)
 
     templateFace = VamFace( args.templateJson )
+    invertTemplate = args.invertTemplate
     templateFace.trimToAnimatable()
     fromFace = VamFace( args.fromJson, discardExtra = False )
     fileFilter = args.filter
@@ -26,17 +27,19 @@ def main( args ):
             try:
                 toName = os.path.splitext(file)[0]
                 outDir = root.lstrip(inputDir)
-                outDir.lstrip('/')
-                outDir.lstrip('\\')
+                outDir = outDir.lstrip('/')
+                outDir = outDir.lstrip('\\')
                 outDir = os.path.join( outputDir, outDir )
                 outName = "{}_mergedWith_{}.json".format( os.path.splitext(file)[0], os.path.splitext(os.path.basename(args.fromJson))[0])
                 toFace = VamFace( os.path.join(root, file), discardExtra = False )
-                newFace = VamFace.mergeFaces( templateFace=templateFace, toFace=toFace, fromFace=fromFace)
+                newFace = VamFace.mergeFaces( templateFace=templateFace, toFace=toFace, fromFace=fromFace, invertTemplate = invertTemplate, copyNonMorphs = True)
                 try:
                     os.makedirs(outDir)
                 except:
                     pass
-                newFace.save( os.path.join(outDir, outName ) )
+                outputName = os.path.join(outDir, outName )
+                newFace.save( outputName )
+                print( "Generated {}".format(outputName ) )
             except Exception as e:
                 print("Error merging {} - {}".format(file, str(e)))
 
@@ -48,7 +51,8 @@ def main( args ):
 #
 def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
-    parser.add_argument('--templateJson', help="Model with morphs to copy set as 'animatable'", required=True)
+    parser.add_argument('--templateJson', help="Model specifying morphs to copy set as 'animatable'", required=True)
+    parser.add_argument("--invertTemplate", action='store_true', default=False, help="TemplateJson actually has morphs *not* to copy")
     parser.add_argument('--toJsonDir', help="Path to find models to copy morphs TO", required=True)
     parser.add_argument('--filter', help="Filter for To morphs. Defaults to *.json", default="*.json")
     parser.add_argument("--recursive", action='store_true', default=False, help="Iterate to subdirectories of toJsonDir")

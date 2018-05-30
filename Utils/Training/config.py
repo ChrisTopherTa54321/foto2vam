@@ -11,7 +11,7 @@ class Config:
     def __init__(self, configJson ):
 
         self._baseFace = VamFace( configJson["baseJson"] )
-        #self._baseFace.trimToAnimatable()  # This line should be in, but I forgot it before creating 250,000 encodings, and I'm not re-doing them.
+        self._baseFace.trimToAnimatable()
         self._paramShape = None
         angles = set()
         self._input_params = []

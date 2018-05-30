@@ -1,0 +1,783 @@
+{ 
+   "atoms" : [ 
+      { 
+         "id" : "Person", 
+         "type" : "Person", 
+         "storables" : [ 
+            { 
+               "id" : "geometry", 
+               "character" : "Female 3", 
+               "clothing" : [ 
+                  { 
+                     "name" : "Simple Underwear Shorts", 
+                     "enabled" : "true"
+                  }, 
+                  { 
+                     "name" : "Simple Top", 
+                     "enabled" : "true"
+                  }
+               ], 
+               "hair" : "Ponytail", 
+               "morphs" : [ 
+                  { 
+                     "name" : "Aiko 6 Body", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Androgynous", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Body Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Body Tone", 
+                     "value" : "0.4753637"
+                  }, 
+                  { 
+                     "name" : "Fitness Details", 
+                     "value" : "0.9420856"
+                  }, 
+                  { 
+                     "name" : "Teen Josie Body", 
+                     "value" : "0.5531501"
+                  }, 
+                  { 
+                     "name" : "Eyelids Bottom Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyelids Upper Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Almond Inner", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Almond Outer", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Angle", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Height Inner", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Height Outer", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Inner Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Puffy Lower", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Puffy Upper", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Wrinkle", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Inner Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Inner Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Outer Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Outer Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Shape Inner", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Shape Middle", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Shape Outer", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brow Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brows Arch", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Brows Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Bone Define ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Bones Arch ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Bones Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Bones Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Bones Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Bones Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Jowl", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Lower Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheek Lower Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheeks Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheeks Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheeks Dimple Crease", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheeks Inner Puffy", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheeks Sink", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cheeks Sink Lower", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Cleft", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Crease", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Crease Smooth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Chin Width 2", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cranium Slope", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eye Fold", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyelid Upper Inner Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyelid Upper Shape  Outer", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Bags", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Inner  Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Inner Corner Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Inner Corner Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Lower Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Open", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Outer Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Puffy Outer", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Round Lower", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Round Upper", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Slant Outer ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Eyes Upper Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Center Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Depth Lower ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Flat", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Heart", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Square", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Face Young", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Forehead Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Forehead Flat", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Forehead Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Forehead Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Angle", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Chin Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Corner Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Corner Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Curve", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Line Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Jaw Square", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Laugh Lines", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Corner Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Corner Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Curve", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Height 2", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Lower Width ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Middle Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Middlle Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Root Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Septum Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tilt", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Bottom Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Upper Shape ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Width Lower", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Width Upper", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Flare", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Inner Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Rotation", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Shape Bottom", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Shape Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Shape Top", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Temples Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Adrianna", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Aiko 6 Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Aneta", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Carmen Face", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cranium Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Cranium Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Danika Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Kori Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mei Lin 6 Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Monique 6 Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Stephanie 6 Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Sumiko Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Teen Josie Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Victoria 6 Head", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Lower Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Lower Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Lower Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Top Peak", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Upper Curves", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Upper Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lip Upper Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Bottom Full", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Bottom Shape ", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Bottom Small", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Bow Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Bow Shape", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Edge Define", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Heart", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Square", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Thin", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Top Full", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "LIps Top Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Upper Curves  Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Lips Upper Curves Corner", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Corner Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Curves", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Curves  Arch", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Curves Corner", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Marionette lines", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Mouth Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Skew", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bridge Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Bump", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Flesh Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Pinch", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Ridge", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Ridge Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Septum Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Septum Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Septum Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Round", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Tip Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nose Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Flesh Size", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Height", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Nostrils Width", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Philtrum Angle", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Philtrum Depth", 
+                     "animatable" : "true"
+                  }, 
+                  { 
+                     "name" : "Philtrum Width", 
+                     "animatable" : "true"
+                  }
+               ]
+            }, 
+            { 
+               "id" : "BreastPhysicsMesh", 
+               "softVerticesColliderRadius" : "0.03476021"
+            }
+         ]
+      }
+   ]
+}

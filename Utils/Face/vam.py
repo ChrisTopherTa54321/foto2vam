@@ -54,38 +54,102 @@ class VamFace:
 
 
     @staticmethod
-    def mergeFaces( templateFace, fromFace, toFace ):
-        # Create a copy of 'fromFace' that only contains morphs to copy
-        scratchFromFace = copy.deepcopy( fromFace )
-        scratchFromFace.matchMorphs( templateFace )
-        scratchToFace = copy.deepcopy( toFace )
+    def mergeFaces( templateFace, fromFace, toFace, invertTemplate = False, copyNonMorphs = False ):
+        newFace = copy.deepcopy( toFace )
 
-        # ScratchFromFace contains only the values we want to copy
-        # scratchToFace contains the face to copy to.
-        # Now, overwrite scratchToFace parameters with ScratchFromFace params
+        # Copy non-morphs, like clothes and skin
+        if copyNonMorphs:
+            for node,val in fromFace.morphsContainer.items():
+                if node != "morphs":
+                    newFace.morphsContainer[node] = val
 
-        for otherMorph in scratchFromFace.morphs:
-            morph = scratchToFace._getMorph(otherMorph['name'])
-            if not morph:
-                scratchToFace.morphs.append( otherMorph )
-            else:
-                morph = otherMorph
+        # Now copy, based on the template, the morphs
+        newMorphs = []
+        for morph in fromFace.morphs:
+            # First check the template to see if we want to copy the morph
+            templateMorph = templateFace._getMorph( morph['name'] )
 
-        scratchToFace.morphsContainer['morphs'] = scratchToFace.morphs
-        scratchToFace.morphs = scratchToFace.morphsContainer['morphs']
-        scratchToFace._createMorphFloats()
-        return scratchToFace
+            copyMorph = False
+            if templateMorph and "animatable" in templateMorph and templateMorph["animatable"]:
+                copyMorph = True
+
+            if invertTemplate:
+                copyMorph = not copyMorph
+
+            # If we want this morph then copy it to newFace
+            if copyMorph:
+                newMorphs.append( morph )
+                continue
+
+            # Okay, we didn't want to copy it from fromFace, so keep the old morph (or set to 0)
+            oldMorph = toFace._getMorph( morph['name'] )
+            if not oldMorph:
+                oldMorph = morph.copy()
+                oldMorph['value'] = 0
+            newMorphs.append( oldMorph )
+#
+        newFace.morphsContainer['morphs'] = newMorphs
+        newFace.morphs = newFace.morphsContainer['morphs']
+        newFace._createMorphFloats()
+
+        return newFace
 
 
-    # Discard morphs in this face that are not in otherFace. Aligns morphFloats between the two faces.
-    def matchMorphs(self, otherFace, copyUnknowns = False):
+    def copyNonMorphs(self, fromFace ):
+
+        pass
+#         toFace.matchMorphs(fromFace)
+#         for morph in fromFace.morphs:
+#             if fromFace.getMorph( morph['name'] ):
+#                 if morph['name'] is in fromFace.morphs:
+#
+#
+#
+#         # Create a copy of 'fromFace' that only contains morphs to copy
+#         scratchFromFace = copy.deepcopy( fromFace )
+#         scratchFromFace.matchMorphs( templateFace )
+#         scratchToFace = copy.deepcopy( toFace )
+#
+#         # ScratchFromFace contains only the values we want to copy
+#         # scratchToFace contains the face to copy to.
+#         # Now, overwrite scratchToFace parameters with ScratchFromFace params
+#
+#         for otherMorph in scratchFromFace.morphs:
+#             morph = scratchToFace._getMorph(otherMorph['name'])
+#             if not morph:
+#                 scratchToFace.morphs.append( otherMorph )
+#             else:
+#                 morph = otherMorph
+#
+#         scratchToFace.morphsContainer['morphs'] = scratchToFace.morphs
+#         scratchToFace.morphs = scratchToFace.morphsContainer['morphs']
+#         scratchToFace._createMorphFloats()
+#         return scratchToFace
+
+
+    # Aligns morphFloats between the two faces, discarding any morphs not in otherFace
+    def matchMorphs(self, otherFace, copyUnknowns = False, templateFace = None, invertTemplate = False):
         newMorphs = []
         self.updateJson()
 
-        # Keep only morphs that exist in the other face. If the other face has a morph that
-        # we don't then add it as a 0 value
+        # Loop through other morph, copying any required morphs
         for otherMorph in otherFace.morphs:
+            if templateFace:
+                templateMorph = templateFace._getMorph( otherMorph['name'] )
+
+                if templateMorph and "animatable" in templateMorph and templateMorph["animatable"]:
+                    copyMorph = True
+
+                if invertTemplate:
+                    copyMorph = not copyMorph
+
+                # If we don't want to copy this morph, just copy the original morph
+                if not copyMorph:
+                    newMorphs.append( otherMorph )
+                    continue
+
             morph = self._getMorph(otherMorph['name'])
+
             if not morph:
                 # If we didn't have a value for the morph in the other face, then set to 0
                 morph = otherMorph.copy()
