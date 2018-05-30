@@ -19,7 +19,11 @@ class ParamGenerator:
         self._generators = { "encoding": self._encodingParams,
                              "json": self._jsonParams,
                              "eye_mouth_ratio": self._eye_mouth_ratio_params,
-                             "mouth_chin_ratio": self._mouth_chin_ratio_params }
+                             "mouth_chin_ratio": self._mouth_chin_ratio_params,
+                             "eye_height_width_ratio": self._eye_height_width_ratio_params,
+                             "nose_height_width_ratio": self._nose_height_width_ratio_params,
+                             "brow_height_width_ratio": self._brow_height_width_ratio_params,
+                             "brow_chin_ratio": self._brow_chin_ratio_params  }
 
         for angle in self._angles:
             self._facebuckets[angle] = []
@@ -102,7 +106,20 @@ class ParamGenerator:
 
         return [( averages["left_eye"][0] + averages["right_eye"][0] ) / (averages["top_lip"][0] + averages["bottom_lip"][0] )]
 
+    def _eye_height_width_ratio_params(self, params):
+        angle = None
+        for param in params:
+            if "name" in param and param["name"] == "angle":
+                angle = float(param["value"])
+                break
 
+        landmarks = []
+        for encoding in self._facebuckets[angle]:
+            landmarks.append(encoding.getLandmarks())
+
+        averages = ParamGenerator._calcAverageSizes( landmarks )
+
+        return [( averages["left_eye"][1] + averages["right_eye"][1] ) / ( averages["left_eye"][0] + averages["right_eye"][0] )]
 
     def _mouth_chin_ratio_params(self, params):
         angle = None
@@ -120,6 +137,51 @@ class ParamGenerator:
         return [averages["top_lip"][0] / averages["chin"][0]]
 
 
+    def _nose_height_width_ratio_params(self, params):
+        angle = None
+        for param in params:
+            if "name" in param and param["name"] == "angle":
+                angle = float(param["value"])
+                break
+
+        landmarks = []
+        for encoding in self._facebuckets[angle]:
+            landmarks.append(encoding.getLandmarks())
+
+        averages = ParamGenerator._calcAverageSizes( landmarks )
+
+        return [averages["nose_bridge"][1] / averages["nose_tip"][0]]
+
+
+    def _brow_height_width_ratio_params(self, params):
+        angle = None
+        for param in params:
+            if "name" in param and param["name"] == "angle":
+                angle = float(param["value"])
+                break
+
+        landmarks = []
+        for encoding in self._facebuckets[angle]:
+            landmarks.append(encoding.getLandmarks())
+
+        averages = ParamGenerator._calcAverageSizes( landmarks )
+
+        return [( averages["left_eyebrow"][1] + averages["right_eyebrow"][1] ) / ( averages["left_eyebrow"][0] + averages["right_eyebrow"][0] )]
+
+    def _brow_chin_ratio_params(self, params):
+        angle = None
+        for param in params:
+            if "name" in param and param["name"] == "angle":
+                angle = float(param["value"])
+                break
+
+        landmarks = []
+        for encoding in self._facebuckets[angle]:
+            landmarks.append(encoding.getLandmarks())
+
+        averages = ParamGenerator._calcAverageSizes( landmarks )
+
+        return [( averages["left_eyebrow"][0] + averages["right_eyebrow"][0] ) / ( averages["chin"][0]) ]
 
     @staticmethod
     def _calcAverageSizes( landmarks ):

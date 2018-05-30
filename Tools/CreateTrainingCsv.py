@@ -94,7 +94,7 @@ def worker_process_func(procId, workQueue, doneEvent, config, args):
                     except Exception as e:
                         pass
                         #print( "Failed to generate CSV from {} - {}".format( file, str(e)))
-                print( "Worker {} done with {} ({} entries at {} entries/second)".format(procId, outCsvFile, numCreated, numCreated/( time.time() - start ) ) )
+                print( "Worker {} done with {} ({} entries took {} seconds, at {} entries/second)".format(procId, outCsvFile, numCreated, time.time() - start, numCreated/( time.time() - start ) ) )
 
             except Exception as e:
                 print("Worker {} failed generating {} : {}".format(procId, outCsvFile, str(e)))

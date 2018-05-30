@@ -2,7 +2,7 @@
 import argparse
 import os
 import numpy
-
+import collections
 from keras.models import load_model
 from keras.models import Sequential
 from keras.layers import Dense
@@ -65,11 +65,13 @@ def main( args ):
         model = generateModel( numInputs = inputSize, numOutputs=outputSize )
 
     print("Training...")
+    scoreHistory = collections.deque( maxlen=5 )
     while True:
-        model.fit(X,Y, epochs=25, batch_size=8192, verbose=0, shuffle=True)
         scores= model.evaluate(vX,vY, verbose=0)
-        print("Saving progress... {}".format(scores))
+        scoreHistory.append(float(scores))
+        print("Saving progress... {}  Last {}: {}".format(scores, len(scoreHistory), sum(scoreHistory)/len(scoreHistory)))
         model.save(outputModelFile)
+        model.fit(X,Y, epochs=25, batch_size=16384, verbose=0, shuffle=True)
 
 def generateModel( numInputs, numOutputs ):
     print("Generating a model with {} inputs and {} outputs".format(numInputs, numOutputs))
