@@ -2255,6 +2255,11 @@
                      "animatable" : "true"
                   }, 
                   { 
+                     "name" : "Labia majora-relaxation", 
+                     "value" : "0.5",
+                     "animatable" : "true"
+                  }, 
+                  { 
                      "name" : "Adrianna", 
                      "value" : "0.7884179", 
                      "animatable" : "true"
