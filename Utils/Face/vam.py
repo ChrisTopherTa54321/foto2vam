@@ -54,7 +54,7 @@ class VamFace:
 
 
     @staticmethod
-    def mergeFaces( templateFace, fromFace, toFace, invertTemplate = False, copyNonMorphs = False, discardAnimatable = True ):
+    def mergeFaces( templateFace, fromFace, toFace, invertTemplate = False, copyNonMorphs = False ):
         newFace = copy.deepcopy( toFace )
 
         # Copy non-morphs, like clothes and skin
@@ -91,22 +91,27 @@ class VamFace:
             if invertTemplate:
                 copyMorph = not copyMorph
 
+            toMorph = toFace._getMorph( morph['name'] )
+
             # If we want this morph then copy it to newFace
             if copyMorph:
                 morphCopy = morph.copy()
-                morphCopy['animatable'] = False
+                # Maintain original animatable flag or clear it
+                if toMorph and 'animatable' in toMorph:
+                    morphCopy['animatable'] = toMorph['animatable']
+                else:
+                    morphCopy['animatable'] = False
                 newMorphs.append( morphCopy )
                 continue
 
             # Okay, we didn't want to copy it from fromFace, so keep the old morph (or set to 0)
-            oldMorph = toFace._getMorph( morph['name'] )
-            if not oldMorph:
+            if not toMorph:
                 morphCopy = morph.copy()
                 morphCopy['value'] = 0
+                morphCopy['animatable'] = False
             else:
-                morphCopy = oldMorph.copy()
+                morphCopy = toMorph.copy()
 
-            morphCopy['animatable'] = False
             newMorphs.append( morphCopy )
 #
         VamFace.setStorable( newFace._storables, "geometry", "morphs", newMorphs, create=True)
@@ -219,9 +224,12 @@ class VamFace:
         self.headRotation['y'] = angle
 
     # Update the json with the values from the float list
-    def updateJson(self):
+    def updateJson(self, discardAnimatable = False):
         for idx,morph in enumerate(self.morphs):
             morph["value"] = self.morphFloats[idx]
+            if discardAnimatable and 'animatable' in morph:
+                del morph['animatable']
+
 
     def _getMorph(self, key):
         morph = list( filter( lambda x : x['name'] == key, self.morphs ) )

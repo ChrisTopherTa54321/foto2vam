@@ -40,10 +40,10 @@ def main( args ):
     for root, subdirs, files in os.walk(inputDir):
         for file in files:
             try:
-                skipSample = random.random() < args.skipChance 
+                skipSample = random.random() < args.skipChance
                 relatedFiles = []
                 if multiDir:
-                    if skipSample: 
+                    if skipSample:
                         continue
                     if not file.endswith(".json"):
                         continue
@@ -80,6 +80,8 @@ def main( args ):
                     folderName = os.path.split(root)[-1]
 
                 outputFullPath = os.path.join( outputFolder, "{}_{}.json".format(folderName, modelName))
+                # discard animatable flags
+                face.updateJson( discardAnimatable = True )
                 face.save( outputFullPath )
                 print( "Generated {}".format(outputFullPath) )
             except Exception as e:
