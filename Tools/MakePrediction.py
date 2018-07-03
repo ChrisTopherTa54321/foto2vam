@@ -85,7 +85,7 @@ def main( args ):
                 face.save( outputFullPath )
                 print( "Generated {}".format(outputFullPath) )
             except Exception as e:
-                print( "Failed to generate model from {} - {}".format(root, str(e) ) )
+                print( "ERROR: Failed to generate model from {} - {}".format(root, str(e) ) )
 
             # If not multiDir then we've already processed all of the files
             if not multiDir:

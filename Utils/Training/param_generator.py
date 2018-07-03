@@ -77,15 +77,15 @@ class ParamGenerator:
         for encoding in self._facebuckets[angle]:
             encodings.append(encoding.getEncodings())
 
+        if len(encodings) == 0:
+            raise Exception( "No encodings found for angle {}".format(angle))
         averages = [0]*len(encodings[0])
-        if len(encodings) > 0:
-            for encoding in encodings:
-                for idx,val in enumerate(encoding):
-                    averages[idx] += val
-            for idx,val in enumerate(averages):
-                averages[idx] /= len(encodings)
-        else:
-            averages = encodings[0]
+
+        for encoding in encodings:
+            for idx,val in enumerate(encoding):
+                averages[idx] += val
+        for idx,val in enumerate(averages):
+            averages[idx] /= len(encodings)
 
         return averages
 
