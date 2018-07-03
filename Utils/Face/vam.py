@@ -14,10 +14,10 @@ class VamFace:
 
         # reference to the 'morphs' in the json
         self.morphs = None
-        # reference to the parent of 'morphs' in the Json
-        self.morphsContainer = None
         # reference to head rotation in the json
         self.headRotation = None
+        # reference to storables in the json
+        self._storables = None
 
         # morphs as a list of floats
         self.morphFloats = []
@@ -54,14 +54,29 @@ class VamFace:
 
 
     @staticmethod
-    def mergeFaces( templateFace, fromFace, toFace, invertTemplate = False, copyNonMorphs = False ):
+    def mergeFaces( templateFace, fromFace, toFace, invertTemplate = False, copyNonMorphs = False, discardAnimatable = True ):
         newFace = copy.deepcopy( toFace )
 
         # Copy non-morphs, like clothes and skin
         if copyNonMorphs:
-            for node,val in fromFace.morphsContainer.items():
-                if node != "morphs":
-                    newFace.morphsContainer[node] = val
+            for storable in fromFace._storables:
+                id = storable['id'] if 'id' in storable else None
+                # Storable must have an id, and we aren't currently copying morphs
+                if id is None:
+                    continue
+
+                # Special case geometry, since we don't want to overwrite morphs
+                if id == 'geometry':
+                    newStorable = VamFace.getStorable( newFace._storables, id, create = True )
+                    # Merge fromFace geometry with toFace
+                    newStorable.update( storable )
+                    # But keep toFace morphs for now
+                    newStorable['morphs'] = VamFace.getStorable( toFace._storables, "geometry", "morphs" )
+                else:
+                    # Otherwise copy this morph into newFace
+                    newStorable = VamFace.getStorable( newFace._storables, id, create = True )
+                    newStorable.clear()
+                    newStorable.update( storable )
 
         # Now copy, based on the template, the morphs
         newMorphs = []
@@ -78,54 +93,26 @@ class VamFace:
 
             # If we want this morph then copy it to newFace
             if copyMorph:
-                newMorphs.append( morph )
+                morphCopy = morph.copy()
+                morphCopy['animatable'] = False
+                newMorphs.append( morphCopy )
                 continue
 
             # Okay, we didn't want to copy it from fromFace, so keep the old morph (or set to 0)
             oldMorph = toFace._getMorph( morph['name'] )
             if not oldMorph:
-                oldMorph = morph.copy()
-                oldMorph['value'] = 0
-            newMorphs.append( oldMorph )
+                morphCopy = morph.copy()
+                morphCopy['value'] = 0
+            else:
+                morphCopy = oldMorph.copy()
+
+            morphCopy['animatable'] = False
+            newMorphs.append( morphCopy )
 #
-        newFace.morphsContainer['morphs'] = newMorphs
-        newFace.morphs = newFace.morphsContainer['morphs']
+        VamFace.setStorable( newFace._storables, "geometry", "morphs", newMorphs, create=True)
         newFace._createMorphFloats()
 
         return newFace
-
-
-    def copyNonMorphs(self, fromFace ):
-
-        pass
-#         toFace.matchMorphs(fromFace)
-#         for morph in fromFace.morphs:
-#             if fromFace.getMorph( morph['name'] ):
-#                 if morph['name'] is in fromFace.morphs:
-#
-#
-#
-#         # Create a copy of 'fromFace' that only contains morphs to copy
-#         scratchFromFace = copy.deepcopy( fromFace )
-#         scratchFromFace.matchMorphs( templateFace )
-#         scratchToFace = copy.deepcopy( toFace )
-#
-#         # ScratchFromFace contains only the values we want to copy
-#         # scratchToFace contains the face to copy to.
-#         # Now, overwrite scratchToFace parameters with ScratchFromFace params
-#
-#         for otherMorph in scratchFromFace.morphs:
-#             morph = scratchToFace._getMorph(otherMorph['name'])
-#             if not morph:
-#                 scratchToFace.morphs.append( otherMorph )
-#             else:
-#                 morph = otherMorph
-#
-#         scratchToFace.morphsContainer['morphs'] = scratchToFace.morphs
-#         scratchToFace.morphs = scratchToFace.morphsContainer['morphs']
-#         scratchToFace._createMorphFloats()
-#         return scratchToFace
-
 
     # Aligns morphFloats between the two faces, discarding any morphs not in otherFace
     def matchMorphs(self, otherFace, copyUnknowns = False, templateFace = None, invertTemplate = False):
@@ -157,8 +144,9 @@ class VamFace:
                     morph['value'] = 0
             newMorphs.append(morph)
 
-        self.morphsContainer['morphs'] = newMorphs
-        self.morphs = self.morphsContainer['morphs']
+        geometry = VamFace.getStorable( self._storables, "geometry", create=True )
+        geometry['morphs'] = newMorphs
+        self.morphs = newMorphs
         self._createMorphFloats()
 
     def trimToAnimatable(self):
@@ -168,8 +156,9 @@ class VamFace:
         for morph in self.morphs:
             if 'animatable' in morph:
                 newMorphs.append(morph)
-        self.morphsContainer['morphs'] = newMorphs
-        self.morphs = self.morphsContainer['morphs']
+        geometry = VamFace.getStorable( self._storables, "geometry", create=True )
+        geometry['morphs'] = newMorphs
+        self.morphs = newMorphs
         print("Ending trim with {} morphs".format(len(self.morphs)))
         self._createMorphFloats()
 
@@ -177,70 +166,38 @@ class VamFace:
     def load(self, filename, discardExtra = True ):
             data = open(filename).read()
             self.jsonData = json.loads(data)
-            storables = self.jsonData["atoms"][0]["storables"]
+            atoms = self.jsonData["atoms"][0]
+            self._storables = atoms["storables"]
 
-            # Find the morphs in the json file
-            storable = list(filter(lambda x : x['id'] == "geometry", storables))
-
-            # Dont' know how else to store a reference in Python
-            self.morphsContainer = storable[0]
-            self.morphs = self.morphsContainer['morphs']
+            # Get a reference to the object containing 'morphs' so we can completely replace 'morphs'
+            geometry = VamFace.getStorable( self._storables, "geometry" )
+            self.morphs = geometry['morphs']
 
             if discardExtra:
-                # Try to normalize the face pose
-                self.morphsContainer["hair"] = "No Hair"
-                self.morphsContainer["clothing"] = []
-                self.morphsContainer["character"] = "Female 1"
+                # Throw away everything from storables
+                self._storables = []
+                atoms["storables"] = self._storables
 
-                storable = list(filter(lambda x : x['id'] == "rescaleObject", storables))
-                if len(storable) > 0:
-                    storable[0]["scale"] = 1.0
-
-                storable = list(filter(lambda x : x['id'] == "EyelidControl", storables))
-                if len(storable) > 0:
-                    storable[0]["blinkEnabled"] = "false"
-                else:
-                    newNode = {
-                              "id" : "EyelidControl",
-                              "blinkEnabled" : "false"
-                              }
-                    storables.append(newNode)
-
-                storable = list(filter(lambda x : x['id'] == "AutoExpressions", storables))
-                if len(storable) > 0:
-                    storable[0]["enabled"] = "false"
-                else:
-                    newNode = {
-                              "id" : "AutoExpressions",
-                              "enabled" : "false"
-                              }
-                    storables.append(newNode)
-
-                storable = list(filter(lambda x : x['id'] == "JawControl", storables))
-                if len(storable) > 0:
-                    storable[0]["targetRotationX"] = 0
-
+                VamFace.setStorable( self._storables, "geometry", "morphs", self.morphs, create=True)
+                VamFace.setStorable( self._storables, "geometry", "hair", "No Hair", create=True)
+                VamFace.setStorable( self._storables, "geometry", "clothing", [], create=True)
+                VamFace.setStorable( self._storables, "geometry", "character", "Female 1", create=True)
+                VamFace.setStorable( self._storables, "rescaleObject", "scale", 1.0 )
+                VamFace.setStorable( self._storables, "JawControl", "targetRotationX", 0 )
+                VamFace.setStorable( self._storables, "EyelidControl", "blinkEnabled", "false", create=True )
+                VamFace.setStorable( self._storables, "AutoExpressions", "enabled", "false", create=True )
 
             # Find the head rotation value in the json
-            storable = list(filter(lambda x : x['id'] == "headControl", storables))
-            if storable:
-                storable[0]['rotation'] = { "x" : 0, "y" : 0, "z": 0 }
-                self.headRotation = storable[0]['rotation']
-            else:
-                newNode = {
-                          "id" : "headControl",
-                          "rotation" : { "x" : 0, "y" : 0, "z": 0 },
-                          "rotationState" : "On"
-                          }
-                storables.append(newNode)
-                self.headRotation = newNode["rotation"]
-
+            VamFace.setStorable( self._storables, "headControl", "rotation", { "x": 0, "y": 0, "z": 0}, create=True )
+            VamFace.setStorable( self._storables, "headControl", "positionState", "Off" )
+            VamFace.setStorable( self._storables, "headControl", "rotationState", "On" )
+            self.headRotation = VamFace.getStorable( self._storables, "headControl")['rotation']
 
     # Save json file
     def save(self, filename):
         self.updateJson()
         with open(filename, 'w') as outfile:
-            json.dump(self.jsonData, outfile)
+            json.dump(self.jsonData, outfile, indent=3)
 
 
     # randomize all face values
@@ -273,5 +230,25 @@ class VamFace:
         return None
 
     def _getMorphValue(self, key):
-        morph = self.getMorph(key)
+        morph = self._getMorph(key)
         return morph['value'] if morph and 'value' in morph else None
+
+    @staticmethod
+    def setStorable(storables, id, param, value, create = False ):
+        storable = VamFace.getStorable(storables, id, create)
+        if storable:
+            storable[param] = value
+            return storable
+        return None
+
+
+    @staticmethod
+    def getStorable( storables, id, create = False ):
+        storable = list(filter(lambda x : x['id'] == id, storables ) )
+        if len(storable) > 0:
+            return storable[0]
+        elif create:
+            newNode = { "id": id }
+            storables.append( newNode )
+            return newNode
+        return None
