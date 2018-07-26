@@ -3,8 +3,12 @@
 import win32gui
 import win32con
 import pyautogui
+import win32pipe;
+import win32file;
+import pywintypes;
 import os
 import time
+import json
 
 # convert a rect of (left, top, right, bottom) to (x, y, w, h)
 def _rect2xywh(rect):
@@ -14,9 +18,24 @@ def _rect2xywh(rect):
 
 class VamWindow:
     _wHndl = 0
+    _pipe = None
+    _idx = 0
 
-    def __init__(self, idx = 0 ):
-        self._idx = idx
+    def __init__(self, pipe = None ):
+        if pipe != None:
+            try:
+                self._pipe = win32file.CreateFile(
+                        r'\\.\\pipe\\' + pipe,
+                        win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+                        0,
+                        None,
+                        win32file.OPEN_EXISTING,
+                        0,
+                        None
+                        )
+            except pywintypes.error as e:
+                print( str(e) );
+
         self._getVamHndl()
 
         self._clickLocations = None
@@ -103,7 +122,7 @@ class VamWindow:
 
     # Click the buttons to load the look.
     # ClickLocations is an array of (x,y) tuples which will be clicked in order
-    def loadLook(self):
+    def clickLoadLook(self):
         self.focus()
         # If coordinates were passed in, just click the mouse on them one after the other
         if self._clickLocations:
@@ -111,6 +130,21 @@ class VamWindow:
                 self.clickInWindow( coords )
             return
 
+
+    def loadLook(self, jsonPath, angles = [0]):
+        if self._pipe is not None:
+            self.loadLookPipe( jsonPath, self._pipe, angles )
+        else:
+            raise Exception("Todo: Reimplement window clicking. Specify a pipe for control")
+
+    def loadLookPipe(self, jsonPath, pipe, angles ):
+        msg = {};
+        msg["cmd"] = "screenshot";
+        msg["angles"] = angles
+        msg["json"] = jsonPath
+        msg["outputPath"] = jsonPath
+        msg["dimensions"] = [ 512, 512 ]
+        win32file.WriteFile( pipe, (json.dumps(msg) + "<EOM>").encode() )
 
     def getScreenShot(self, region=None):
         self.focus()

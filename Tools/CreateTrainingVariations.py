@@ -42,6 +42,7 @@ def main( args ):
     faceCnt = 0;
     print( "Generating variations")
 
+    maxVariantsSize = 10000
     mutateChance = .6
     mateChance = .7
     faceVariants = [] + inputFaces
@@ -67,7 +68,11 @@ def main( args ):
                 mutate(newFace, random.randint(0,random.randint(1,50)) )
 
             newFace.save( os.path.join(rotatedOutputPath, "face_variant_{}_{}.json".format(faceCnt, random.randint(0,99999))))
-            faceVariants.append(newFace)
+            # If at max size, replace a random element. Otherwise append
+            if len(faceVariants) >= maxVariantsSize:
+                faceVariants[ random.randint(0, len(faceVariants) - 1) ] = newFace
+            else:
+                faceVariants.append(newFace)
             faceCnt += 1
             if faceCnt % 500 == 0:
                 print( "{}/{}".format(faceCnt,args.numFaces) )
