@@ -157,13 +157,7 @@ namespace VamMod
 
 		private IEnumerator TakeScreenshotCo(Atom atom, string aOutputPath, List<int> aAngles, int aWidth, int aHeight)
 		{
-			Camera camera = new GameObject().AddComponent<Camera>();
-			camera.name = "CoCamera";
-			camera.enabled = true;
-			camera.fieldOfView = 20f;
-			RenderTexture renderTexture = new RenderTexture(aWidth, aHeight, 24);
-			camera.targetTexture = renderTexture;
-			Texture2D texture2d = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGB24, false);
+			List<ScreenshotCamera> cameras = new List<ScreenshotCamera>();
 			Component head = null;
 			Component component = null;
 			foreach (Rigidbody rigidbody in atom.rigidbodies)
@@ -181,45 +175,47 @@ namespace VamMod
 					break;
 				}
 			}
+			foreach (int aAngle in aAngles)
+			{
+				cameras.Add(new ScreenshotCamera(aWidth, aHeight, head.transform, aAngle, 1f));
+			}
 			if (component.transform.rotation != Quaternion.identity)
 			{
 				component.transform.SetPositionAndRotation(component.transform.position, Quaternion.identity);
 			}
 			SuperController.singleton.HideMainHUD();
+			do
+			{
+				yield return null;
+			}
+			while (SuperController.singleton.IsSimulationPaused());
 			Vector3 prevPos = head.transform.position;
 			for (;;)
 			{
 				yield return null;
-				if (!SuperController.singleton.IsSimulationPaused() && (double)(prevPos - head.transform.position).sqrMagnitude <= 0.1)
+				if ((double)(prevPos - head.transform.position).sqrMagnitude <= 0.01)
 				{
 					break;
 				}
 				prevPos = head.transform.position;
 			}
-			foreach (int angle in aAngles)
+			foreach (ScreenshotCamera screenshotCamera in cameras)
 			{
-				camera.transform.SetPositionAndRotation(head.transform.position + new Vector3(0f, 0f, 1f), Quaternion.identity);
-				camera.transform.RotateAround(head.transform.position, Vector3.up, (float)angle);
-				camera.transform.LookAt(head.transform);
-				yield return null;
-				RenderTexture.active = renderTexture;
-				texture2d.ReadPixels(new Rect(0f, 0f, (float)renderTexture.width, (float)renderTexture.height), 0, 0);
-				texture2d.Apply();
-				byte[] bytes = texture2d.EncodeToPNG();
-				File.WriteAllBytes(string.Concat(new string[]
+				screenshotCamera.SetPosition();
+			}
+			yield return null;
+			foreach (ScreenshotCamera screenshotCamera2 in cameras)
+			{
+				screenshotCamera2.TakeScreenshot(string.Concat(new string[]
 				{
 					aOutputPath,
 					"_",
-					angle.ToString(),
+					screenshotCamera2._angle.ToString(),
 					".png"
-				}), bytes);
+				}));
+				screenshotCamera2.Release();
 			}
-			List<int>.Enumerator enumerator = default(List<int>.Enumerator);
-			UnityEngine.Object.Destroy(camera);
-			UnityEngine.Object.Destroy(texture2d);
-			renderTexture.Release();
 			this._event.Set();
-			yield break;
 			yield break;
 		}
 
@@ -326,5 +322,63 @@ namespace VamMod
 		private string _recvdString;
 
 		private Dictionary<string, Action<JSONNode>> _handlers;
+	}
+}
+
+
+
+namespace VamMod
+{
+	internal class ScreenshotCamera
+	{
+		public ScreenshotCamera(int aWidth, int aHeight, Transform aTarget, int aAngle, float aDistance)
+		{
+			this._camera = new GameObject().AddComponent<Camera>();
+			this._camera.name = "ScreenshotCamera";
+			this._camera.enabled = true;
+			this._camera.fieldOfView = 20f;
+			this._renderTexture = RenderTexture.GetTemporary(aWidth, aHeight, 24);
+			this._camera.targetTexture = this._renderTexture;
+			this._texture2d = new Texture2D(this._renderTexture.width, this._renderTexture.height, TextureFormat.RGB24, false);
+			this._target = aTarget;
+			this._angle = aAngle;
+			this._distance = aDistance;
+		}
+
+		public void SetPosition()
+		{
+			this._camera.transform.SetPositionAndRotation(this._target.position + new Vector3(0f, 0f, this._distance), Quaternion.identity);
+			this._camera.transform.RotateAround(this._target.position, Vector3.up, (float)this._angle);
+			this._camera.transform.LookAt(this._target.transform);
+		}
+
+		public void TakeScreenshot(string aFilename)
+		{
+			RenderTexture.active = this._renderTexture;
+			this._texture2d.ReadPixels(new Rect(0f, 0f, (float)this._renderTexture.width, (float)this._renderTexture.height), 0, 0);
+			this._texture2d.Apply();
+			byte[] bytes = this._texture2d.EncodeToPNG();
+			File.WriteAllBytes(aFilename, bytes);
+			RenderTexture.active = null;
+		}
+
+		public void Release()
+		{
+			UnityEngine.Object.Destroy(this._camera);
+			UnityEngine.Object.Destroy(this._texture2d);
+			RenderTexture.ReleaseTemporary(this._renderTexture);
+		}
+
+		private Camera _camera;
+
+		private RenderTexture _renderTexture;
+
+		private Texture2D _texture2d;
+
+		private Transform _target;
+
+		public int _angle;
+
+		private float _distance;
 	}
 }
