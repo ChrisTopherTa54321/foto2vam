@@ -86,6 +86,8 @@ def worker_process_func(procId, workQueue, doneEvent, args):
             #print("Worker thread {} to generate {}->{}".format(procId, inputFile,outputFile))
             try:
                 image = Image.open(inputFile)
+                if args.flipFirst:
+                    image = image.transpose(Image.FLIP_LEFT_RIGHT)
                 if normalizer:
                     image = normalizer.normalize(image)
                     fileName = "{}_normalized.png".format( os.path.splitext(inputFile)[0])
@@ -121,6 +123,7 @@ def parseArgs():
     parser.add_argument("--normalize", action='store_true', default=False, help="Perform image normalization")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")
+    parser.add_argument("--flipFirst", action='store_true', default=False, help="Mirror images by default")
 
 
     return parser.parse_args()

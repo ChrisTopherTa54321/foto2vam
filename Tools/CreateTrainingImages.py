@@ -36,7 +36,7 @@ def main( args ):
     # Initialize the Vam window
     vamWindow = VamWindow( pipe = "foto2vamPipe" )
 
-    angles = [0, 35, 70]
+    angles = [0, 35]
     skipCnt = 0
     screenshots = deque(maxlen=2)
     for root, subdirs, files in os.walk(inputPath):
