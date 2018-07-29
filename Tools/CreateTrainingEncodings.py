@@ -25,7 +25,7 @@ def main( args ):
     fileFilter = args.filter.split(',')
     debugPose = args.debugPose
 
-    poolWorkQueue = multiprocessing.Queue(maxsize=200)
+    poolWorkQueue = multiprocessing.Queue(maxsize=2*numThreads)
     doneEvent = multiprocessing.Event()
     if numThreads > 1:
         pool = []

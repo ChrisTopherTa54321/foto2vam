@@ -21,10 +21,11 @@ def main( args ):
     inputPath = args.inputPath
     outputName = args.outputName
     numThreads = args.numThreads
+    overwrite = args.overwrite;
     config = Config.createFromFile( args.configFile )
 
 
-    poolWorkQueue = multiprocessing.Queue(maxsize=200)
+    poolWorkQueue = multiprocessing.Queue(maxsize=2*numThreads)
     doneEvent = multiprocessing.Event()
     if numThreads > 1:
         pool = []
@@ -41,9 +42,10 @@ def main( args ):
     for root, subdirs, files in os.walk(inputPath):
         print("Generator entering directory {}".format(root))
         outCsvFile = os.path.join(root,outputName)
-        poolWorkQueue.put( (root, outCsvFile) )
-        if pool is None:
-            worker_process_func(0, poolWorkQueue, doneEvent, config, args)
+        if overwrite or not os.path.exists( outCsvFile ):
+            poolWorkQueue.put( (root, outCsvFile) )
+            if pool is None:
+                worker_process_func(0, poolWorkQueue, doneEvent, config, args)
 
         if not args.recursive:
             break
@@ -115,6 +117,7 @@ def parseArgs():
     parser.add_argument("--outputName", help="Name of CSV file to create in each directory")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")
+    parser.add_argument("--overwrite", action='store_true', default=False, help="Overwrite existing CSV files")
 
 
     return parser.parse_args()
