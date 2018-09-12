@@ -216,7 +216,7 @@ class VamFace:
     def importFloatList(self, floatList):
         if len(floatList) == len(self.morphFloats):
             for i in range(len(floatList)):
-                self.morphFloats[i] = floatList[i]
+                self.morphFloats[i] = float(floatList[i])
         else:
             raise Exception("Import list length [{}] is different than face's morph list length [{}]".format(len(floatList), len(self.morphFloats)))
 

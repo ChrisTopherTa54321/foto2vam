@@ -9,6 +9,7 @@ import pywintypes;
 import os
 import time
 import json
+import random
 
 # convert a rect of (left, top, right, bottom) to (x, y, w, h)
 def _rect2xywh(rect):
@@ -20,6 +21,8 @@ class VamWindow:
     _wHndl = 0
     _pipe = None
     _idx = 0
+    _eom = "<EOM>"
+    _pipeReadBuf = ""
 
     def __init__(self, pipe = None ):
         if pipe != None:
@@ -144,7 +147,33 @@ class VamWindow:
         msg["json"] = jsonPath
         msg["outputPath"] = jsonPath
         msg["dimensions"] = [ 512, 512 ]
-        win32file.WriteFile( pipe, (json.dumps(msg) + "<EOM>").encode() )
+        self._writeToPipe( pipe, json.dumps(msg))
+
+    def syncPipe(self, pipe ):
+        print("Sync pipe!")
+        syncId = random.randint(0,1000)
+        msg = {};
+        msg["cmd"] = "echo";
+        msg["id"] = syncId;
+        self._writeToPipe( pipe, json.dumps(msg))
+        data = self._readFromPipe( pipe )
+        print("Response: {}".format(data))
+
+    def _writeToPipe(self, pipe, msg):
+        win32file.WriteFile( pipe, (msg + self._eom).encode() )
+
+    def _readFromPipe(self, pipe ):
+        retBuf = ""
+        while True:
+            rc,data = win32file.ReadFile( pipe, 32 )
+            self._pipeReadBuf += data.decode()
+            eomIdx = self._pipeReadBuf.find( self._eom )
+            if eomIdx >= 0:
+                retBuf = self._pipeReadBuf[:eomIdx]
+                _pipeReadBuf = self._pipeReadBuf[ eomIdx + len(self._eom ):]
+                break
+            print( "Read {}".format(data.decode()))
+        return retBuf
 
     def getScreenShot(self, region=None):
         self.focus()
