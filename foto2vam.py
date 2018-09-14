@@ -25,7 +25,7 @@ def main( args ):
     print( "Processing images from {}".format(inputPath))
 
     print( "First running CreateTrainingEncodings tool")
-    params = argparse.Namespace(inputPath=inputPath, filter="*.png,*.jpg", normalizeSize=150, normalize=True, numJitters=10, numThreads=4, pydev=False, recursive=True, debugPose = False)
+    params = argparse.Namespace(inputPath=inputPath, filter="*.png,*.jpg", normalizeSize=150, normalize=True, numJitters=10, numThreads=4, pydev=False, recursive=True, debugPose = False, flipFirst = False)
     encodings.main( params )
 
     for modelFile in glob.glob( modelGlob ):

@@ -15,6 +15,7 @@ class ParamGenerator:
         self._angles = requiredAngles
         self._angles.sort()
         self._facebuckets = {}
+        self._baseFace = baseFace
 
         self._generators = { "encoding": self._encodingParams,
                              "json": self._jsonParams,
@@ -32,7 +33,10 @@ class ParamGenerator:
         # Read all encodings in from the file list
         for file in relatedFiles:
             try:
-                newFace = EncodedFace.createFromFile(file)
+                if isinstance(file, EncodedFace):
+                    newFace = file
+                else:
+                    newFace = EncodedFace.createFromFile(file)
                 self._encodings.append(newFace)
             except:
                 try:
@@ -61,10 +65,8 @@ class ParamGenerator:
         return outArray
 
     def _jsonParams(self, params):
-        averages = []
+        averages = [0] * len(self._baseFace.morphFloats)
         for face in self._vamFaces:
-            if not averages:
-                averages = [0] * len(face.morphFloats)
             for idx,val in enumerate(face.morphFloats):
                 averages[idx] += val/len(self._vamFaces)
         return averages

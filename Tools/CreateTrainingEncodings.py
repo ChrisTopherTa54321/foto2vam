@@ -97,8 +97,10 @@ def worker_process_func(procId, workQueue, doneEvent, args):
                 mirrored = ""
                 if encodedFace.getAngle() < 0:
                     #print( "Mirroring image to face left")
-                    mirrored = "[mirrored]"
+                    old_angle = encodedFace.getAngle()
                     encodedFace = EncodedFace( image.transpose(Image.FLIP_LEFT_RIGHT), debugPose = args.debugPose )
+                    new_angle = encodedFace.getAngle()
+                    mirrored = "[mirrored] {} : {}".format(old_angle, new_angle)
                 encodedFace.saveEncodings(outputFile)
                 print("Worker {} generated {} {}".format(procId, outputFile, mirrored ) )
             except Exception as e:
@@ -120,7 +122,7 @@ def parseArgs():
     #parser.add_argument('--outputPath', help="Directory to write output data to", default="output")
     parser.add_argument("--debugPose", action='store_true', default=False, help="Display landmarks and pose on each image")
     parser.add_argument("--recursive", action='store_true', default=False, help="Recursively enter directories")
-    parser.add_argument("--normalize", action='store_true', default=False, help="Perform image normalization")
+    parser.add_argument("--normalize", action='store_true', default=True, help="Perform image normalization")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of processes to use")
     parser.add_argument("--flipFirst", action='store_true', default=False, help="Mirror images by default")

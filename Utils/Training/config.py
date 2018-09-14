@@ -9,7 +9,6 @@ class Config:
     CONFIG_VERSION = 1
 
     def __init__(self, configJson ):
-
         self._baseFace = VamFace( configJson["baseJson"] )
         self._baseFace.trimToAnimatable()
         self._paramShape = None
@@ -64,6 +63,9 @@ class Config:
 
     def getShape(self):
         return self._paramShape
+    
+    def getAngles(self):
+        return self._angles
 
     def generateParams(self, relatedFiles ):
         if self._paramShape is None:

@@ -150,6 +150,8 @@ class VamWindow:
         self._writeToPipe( pipe, json.dumps(msg))
 
     def syncPipe(self, pipe ):
+        time.sleep(.25)
+        return
         print("Sync pipe!")
         syncId = random.randint(0,1000)
         msg = {};

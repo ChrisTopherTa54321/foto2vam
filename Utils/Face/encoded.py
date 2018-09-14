@@ -194,8 +194,11 @@ class EncodedFace:
     def compare(self, otherFace):
         return face_recognition.face_distance([self._encodings], otherFace._encodings).mean()
 
+    def getEncodingJson(self):
+        return { 'angle': self._angle, 'landmarks': self._landmarks, 'encoding': self._encodings.tolist(), 'encoding_format': self.ENCODING_TYPE, 'encoding_version': self.ENCODING_VERSION }
+
     def saveEncodings(self, filename):
-        jsonData = { 'angle': self._angle, 'landmarks': self._landmarks, 'encoding': self._encodings.tolist(), 'encoding_format': self.ENCODING_TYPE, 'encoding_version': self.ENCODING_VERSION }
+        jsonData = self.getEncodingJson()
         with open(filename, 'w') as outfile:
             json.dump(jsonData, outfile)
 
