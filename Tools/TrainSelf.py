@@ -8,7 +8,7 @@ import numpy as np
 import tempfile
 import shutil
 import time
-
+import csv
 
 NORMALIZE_SIZE=150
 
@@ -22,7 +22,7 @@ def main( args ):
         print("Enabling debugging with pydev")
         import pydevd
         pydevd.settrace(suspend=False)
-        
+
     modelFile = args.outputFile
 
     print("Creating initial encodings...")
@@ -44,7 +44,7 @@ def main( args ):
     procs.append(morphs2image)
 
     # Multiple encoding threads
-    for idx in range(4):
+    for idx in range(7):
         image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, image2encodingQueue, encoding2morphQueue, doneEvent, args.pydev ) )
         procs.append( image2encoding )
 
@@ -56,12 +56,15 @@ def main( args ):
 
     print("Begin processing!")
 
-    # To kick start the process, feed the neural net the initial params
+    #To kick start the process, feed the neural net the initial params
     for encoding in initialEncodings:
-        params = config.generateParams(encoding)
-        encoding2morphQueue.put( ( False, params ) )
+        try:
+            params = config.generateParams(encoding)
+            encoding2morphQueue.put( ( False, params ) )
+        except:
+            pass
 
-    input("Press Enter to continue...")
+    input("Press Enter to exit...")
 
     # Wait for children to finish
     doneEvent.set()
@@ -80,14 +83,12 @@ def getEncodingsFromPath( imagePath, recursive = True, cache = False ):
                     fileName = os.path.join(root,file)
                     encodingName = fileName + "_encoding"
                     if cache and os.path.exists(encodingName):
-                        print("Reading cached {}".format(encodingName))
                         newEncoding = EncodedFace.createFromFile(encodingName)
                     else:
                         newEncoding = createEncoding( fileName )
                         if cache:
-                            print("Caching {}".format(encodingName))
                             newEncoding.saveEncodings( encodingName )
-                            
+
                     encoding.append( newEncoding )
                 except:
                     pass
@@ -103,10 +104,11 @@ def createEncoding( imageFile ):
     from PIL import Image
     from Utils.Face.normalize import FaceNormalizer
     from Utils.Face.encoded import EncodedFace
-    normalizer = FaceNormalizer(NORMALIZE_SIZE)
     img = Image.open(imageFile)
-    img = normalizer.normalize(img)
-    encodedFace = EncodedFace( img )
+    # Supposedly dlib takes care of normalization
+    # normalizer = FaceNormalizer(NORMALIZE_SIZE)
+    #img = normalizer.normalize(img)
+    encodedFace = EncodedFace( img, num_jitters=1 )
     return encodedFace
 
 
@@ -141,13 +143,15 @@ def morphs_to_image_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
 
         except queue.Empty:
             pass
+        except Exception as e:
+            print("Error in morphs_to_image_proc: {}".format(str(e)))
 
 
 def image_to_encoding_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
-    
+
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
     while not doneEvent.is_set():
@@ -159,13 +163,38 @@ def image_to_encoding_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
                 params_valid = True
             except Exception as e:
                 # If encoding failed then feed a non-trainable random encoding to the output
-                params = getRandomParams( config )
+                params = getRandomInputParams( config )
                 params_valid = False
-                
+
             outputQueue.put( ( params_valid, params ) )
             shutil.rmtree( work, ignore_errors=True )
         except queue.Empty:
             pass
+
+
+def saveCsv( csvName, trainingInputs, trainingOutputs ):
+    if len(trainingInputs) != len(trainingOutputs):
+        raise Exception("Input length mismatch with output length!")
+    
+    outFile = open( csvName, 'w' )
+    writer = csv.writer( outFile, lineterminator='\n')
+    writer.writerow( [ len(trainingInputs[0]), len(trainingOutputs[0])])
+    for idx in range(len(trainingInputs)):
+        writer.writerow( trainingInputs[idx] + trainingOutputs[idx] )
+    outFile.close()
+
+def readCsv( csvName ):
+    inputList = []
+    outputList = []
+    with open(csvName, newline='\n') as f_input:
+        contents = [list(map(float, row)) for row in csv.reader(f_input)]
+    inputCnt,outputCnt = contents[0]
+    inputCnt = int(inputCnt)
+    outputCnt = int(outputCnt)
+    for i in range(1, len(contents)):
+        inputList.append( contents[i][:inputCnt] )
+        outputList.append( contents[i][inputCnt:] )
+    return inputList, outputList 
 
 def getRandomInputParams( config ):
     inputCnt = config.getShape()[0]
@@ -194,6 +223,7 @@ def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueu
         import pydevd
         pydevd.settrace(suspend=False)
 
+    csvName = modelFile + ".csv"
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
 
@@ -201,12 +231,15 @@ def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueu
     trainingOutputs = []
 
     neuralNet = create_neural_net( inputCnt, outputCnt, modelFile )
+    if os.path.exists( csvName ):
+        trainingInputs,trainingOutputs = readCsv( csvName )
+        print("Read {} training samples".format(len(trainingInputs)))
     batches = 0
     targetBatches = 0
     lastSaved = 0
     while not doneEvent.is_set():
         try:
-            valid, params = inputQueue.get(block=False, timeout=1)
+            valid, params = inputQueue.get(block=True, timeout=1)
             inputs = params[:inputCnt]
             outputs = params[inputCnt:]
 
@@ -214,39 +247,59 @@ def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueu
             if valid:
                 trainingInputs.append( inputs )
                 trainingOutputs.append( outputs )
-                targetBatches += 10*len(trainingInputs)
+                targetBatches += 1
                 print( "{} valid faces".format( len(trainingInputs) ) )
 
-            # Now given the encoding, what morphs would we have predicted?
-            predictedOutputs = create_prediction( neuralNet, np.array([inputs]) )
-            predictedParams = inputs + list(predictedOutputs[0])
-            outputQueue.put( predictedParams )
-            
+            # Don't use predictions until we have trained a bit
+            if len(trainingInputs) > 10000:
+                # Now given the encoding, what morphs would we have predicted?
+                predictedOutputs = create_prediction( neuralNet, np.array([inputs]) )
+                predictedParams = inputs + list(predictedOutputs[0])
+                outputQueue.put( predictedParams )
+
+            outputQueue.put( getRandomOutputParams(config) )
+
         except queue.Empty:
-            if batches < targetBatches and len(trainingInputs) > 0:
+            if batches < targetBatches and len(trainingInputs) > 1000:
                 batches += 1
-                neuralNet.train_on_batch( np.array(trainingInputs), np.array(trainingOutputs) )
-                
-                if len(trainingInputs) % 10 == 0 and lastSaved != len(trainingInputs):
+                epochs = 1
+                if len(trainingInputs) > 25000:
+                    epochs = 100
+                for i in range(epochs):
+                    neuralNet.train_on_batch( np.array(trainingInputs), np.array(trainingOutputs) )
+
+                if len(trainingInputs) % 50 == 0 and lastSaved != len(trainingInputs):
                     print("Saving...")
                     neuralNet.save( modelFile )
+                    saveCsv( csvName, trainingInputs, trainingOutputs)
                     lastSaved = len(trainingInputs)
-                    
+
                     # Periodically re-enqueue the initial encodings
                     for encoding in initialEncodings:
-                        params = config.generateParams(encoding)
-                        inputQueue.put( ( False, params ) )
+                        try:
+                            params = config.generateParams(encoding)
+                            inputQueue.put( ( False, params ) )
+                        except:
+                            pass
 
 
             else:
                 if outputQueue.empty():
                     # Bored? Add a random param
                     #inputQueue.put( ( False, getRandomInputParams(config) ) )
-                    outputQueue.put( ( False, getRandomOutputParams(config) ) )
+                    outputQueue.put( getRandomOutputParams(config) )
 
+
+    print("Saving before exit...")
+    neuralNet.save( modelFile )
+    saveCsv( csvName, trainingInputs, trainingOutputs)
+    print("Save complete.")
 
 def create_prediction( nn, input ):
     prediction = nn.predict(input)
+
+    #limit range of output
+    prediction = np.around(np.clip(prediction, -1.5, 1.5 ),3)
     return prediction
 
 
@@ -254,22 +307,25 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
     from keras.models import load_model, Model, Sequential
     from keras.optimizers import Adam
     from keras.layers import Input, Dense, Dropout, LeakyReLU, BatchNormalization
-    
+
     if os.path.exists(modelPath):
         print("Loading existing model")
         return load_model(modelPath)
-        
+
     model = Sequential()
 
-    model.add(Dense( 2*inputCnt + 2*outputCnt, input_shape=(inputCnt,)))
+    model.add(Dense( 8*inputCnt + 2*outputCnt, input_shape=(inputCnt,), kernel_initializer='random_uniform'))
     model.add(LeakyReLU(alpha=0.2))
-    model.add(BatchNormalization(momentum=0.8))
-    model.add(Dense(inputCnt + 2*outputCnt))
+    model.add(Dropout(.2))
+    #model.add(BatchNormalization(momentum=0.8))
+    model.add(Dense(3*inputCnt + 2*outputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU(alpha=0.2))
-    model.add(BatchNormalization(momentum=0.8))
-    model.add(Dense(2*outputCnt))
+    model.add(Dropout(.2))
+    #model.add(BatchNormalization(momentum=0.8))
+    model.add(Dense(2*outputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU(alpha=0.2))
-    model.add(Dense(outputCnt, activation='tanh'))
+    model.add(Dropout(.2))
+    model.add(Dense(outputCnt, activation='linear'))
 
     model.summary()
 
