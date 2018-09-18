@@ -1,6 +1,6 @@
 # Class to handle faces encoded for recognition
 
-import face_recognition
+import face_recognition_hst as face_recognition
 import numpy
 from PIL import Image, ImageDraw
 import cv2
@@ -49,6 +49,22 @@ class EncodedFace:
         if not keepImg:
             self._img = None
 
+
+    @staticmethod
+    def batchEncode( imageList ):
+        encodings, landmarks = face_recognition.batch_face_encodings_and_landmarks( imageList, landmark_model="large" )
+        
+        encodedList = []
+        for data in zip(encodings,landmarks, imageList):
+            if len(data[0]) > 0:
+                encodedFace = EncodedFace(None)
+                encodedFace._encodings = list(data[0][0])
+                encodedFace._landmarks = data[1][0]
+                _, encodedFace._angle, _ = encodedFace._estimatePose( data[2].shape, encodedFace._landmarks )
+            else:
+                encodedFace = None
+            encodedList.append(encodedFace)
+        return encodedList
 
     @staticmethod
     def createFromFile( fileName ):
@@ -183,7 +199,7 @@ class EncodedFace:
         return self._angle
 
     def getEncodings(self):
-        return self._encodings.tolist()
+        return list(self._encodings)
 
     def getLandmarks(self):
         return self._landmarks

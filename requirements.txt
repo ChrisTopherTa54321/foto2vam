@@ -2,7 +2,7 @@ pywin32
 pyautogui
 cmake
 dlib
-face_recognition
+git+https://github.com/ChrisTopherTa54321/face_recognition#egg=face_recognition_hst
 deap
 opencv-python
 imutils

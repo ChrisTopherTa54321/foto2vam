@@ -26,29 +26,41 @@ def main( args ):
     modelFile = args.outputFile
 
     print("Creating initial encodings...")
-    initialEncodings = getEncodingsFromPath(args.imagePath, recursive=True, cache=True)
+    initialEncodings = getEncodingsFromPaths( [args.imagePath], recursive=True, cache=True)
 
     config = Config.createFromFile(args.configFile)
-    initParams = config.generateParams( initialEncodings[0] )
+    # Try encodings until one succeeds
+    initParams = None
+    for encoding in initialEncodings:
+        try:
+            initParams = config.generateParams( encoding )
+            break
+        except:
+            continue
+
+    if initParams is None:
+        raise Exception("Failed to create an initial encoding!")
     print("Shape is {}".format(config.getShape()))
 
     print("Starting child processes...")
+    encBatchSize = 16
+    trainBatchSize = 512
     morph2imageQueue = multiprocessing.Queue()
-    image2encodingQueue = multiprocessing.Queue(maxsize=20)
+    image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
     encoding2morphQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
 
+
     # Set up worker processes
     procs = []
-    morphs2image = multiprocessing.Process(target=morphs_to_image_proc, args=( config, morph2imageQueue, image2encodingQueue, doneEvent, args.pydev ) )
+    morphs2image = multiprocessing.Process(target=morphs_to_image_proc, args=( config,  morph2imageQueue, image2encodingQueue, doneEvent, args.pydev ) )
     procs.append(morphs2image)
 
     # Multiple encoding threads
-    for idx in range(7):
-        image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, image2encodingQueue, encoding2morphQueue, doneEvent, args.pydev ) )
-        procs.append( image2encoding )
+    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, args.pydev ) )
+    procs.append( image2encoding )
 
-    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, args.pydev ) )
+    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, args.pydev ) )
     procs.append(neuralnet)
 
     for proc in procs:
@@ -72,44 +84,51 @@ def main( args ):
         proc.join()
 
 
-def getEncodingsFromPath( imagePath, recursive = True, cache = False ):
-    from Utils.Face.encoded import EncodedFace
-    encodingList = []
-    for root, subdirs, files in os.walk(imagePath):
-        encoding = []
-        for file in files:
-            if file.endswith( ('.png', '.jpg')):
-                try:
-                    fileName = os.path.join(root,file)
-                    encodingName = fileName + "_encoding"
-                    if cache and os.path.exists(encodingName):
-                        newEncoding = EncodedFace.createFromFile(encodingName)
-                    else:
-                        newEncoding = createEncoding( fileName )
-                        if cache:
-                            newEncoding.saveEncodings( encodingName )
+def getEncodingsFromPaths( imagePaths, recursive = True, cache = False ):
+    # We'll create a flat fileList, and placeholder arrays for the return encodings
+    fileList = []
+    encodings = []
+    for imagePath in imagePaths:
+        for root, subdirs, files in os.walk(imagePath):
+            encoding = []
+            for file in files:
+                if file.endswith( ( '.png', '.jpg' ) ):
+                    fileList.append( os.path.join( root, file ) )
+                    encoding.append(None)
+            encodings.append(encoding)
+            if not recursive:
+                break
 
-                    encoding.append( newEncoding )
-                except:
-                    pass
-        if len(encoding) > 0:
-            encodingList.append(encoding)
+    # Now batch create the encodings!
+    batched_encodings = createEncodings( fileList )
 
-        if not recursive:
-            break
-    return encodingList
+    # Now unflatten the batched encodings
+    idx = 0
+    for encoding in encodings:
+        for i in range(len(encoding)):
+            encoding[i] = batched_encodings[i]
+            idx += 1
+
+    return encodings
 
 
-def createEncoding( imageFile ):
+def createEncodings( fileList ):
     from PIL import Image
-    from Utils.Face.normalize import FaceNormalizer
     from Utils.Face.encoded import EncodedFace
-    img = Image.open(imageFile)
-    # Supposedly dlib takes care of normalization
-    # normalizer = FaceNormalizer(NORMALIZE_SIZE)
-    #img = normalizer.normalize(img)
-    encodedFace = EncodedFace( img, num_jitters=1 )
-    return encodedFace
+
+    imageList = []
+    for file in fileList:
+        imageList.append( np.array( Image.open(file) ) )
+    encodedFaces = EncodedFace.batchEncode( imageList )
+
+    #hack
+    for face in encodedFaces:
+        if face is None:
+            continue
+
+        if face.getAngle() < 0:
+            face._angle= -face._angle
+    return encodedFaces
 
 
 
@@ -147,35 +166,52 @@ def morphs_to_image_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
             print("Error in morphs_to_image_proc: {}".format(str(e)))
 
 
-def image_to_encoding_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
+def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
 
+    pathList = []
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
     while not doneEvent.is_set():
+        submitWork = False
         try:
-            work = inputQueue.get(block=True, timeout=1)
-            try:
-                encodings = getEncodingsFromPath( work )
-                params = config.generateParams( encodings[0] + [os.path.join( work, "face.json" )] )
-                params_valid = True
-            except Exception as e:
-                # If encoding failed then feed a non-trainable random encoding to the output
-                params = getRandomInputParams( config )
-                params_valid = False
-
-            outputQueue.put( ( params_valid, params ) )
-            shutil.rmtree( work, ignore_errors=True )
+            work = inputQueue.get(block=True, timeout=5)
+            pathList.append( work )
+            submitWork = len(pathList) >= batchSize
         except queue.Empty:
-            pass
+            submitWork = len(pathList) > 0
+
+        if submitWork:
+            try:
+                start = time.time()
+                print("Submitting {} samples to GPU".format(len(pathList)))
+                encodings = getEncodingsFromPaths( pathList, recursive=False, cache = False )
+                for data in zip( pathList, encodings ):
+                    try:
+                        params = config.generateParams( data[1] + [os.path.join( data[0], "face.json") ] )
+                        params_valid = True
+                    except Exception as e:
+                        # If encoding failed then feed a non-trainable random encoding to the output
+                        params = getRandomInputParams( config )
+                        params_valid = False
+                    outputQueue.put( ( params_valid, params ) )
+                    shutil.rmtree( data[0], ignore_errors=True)
+                elapsed = time.time() - start
+                print("Work done in {}  ({} per sample)!".format( elapsed, elapsed/len(pathList)))
+                pathList.clear()
+                batchSize *= 2
+            except Exception as e:
+                print( str(e) )
+                
+
 
 
 def saveCsv( csvName, trainingInputs, trainingOutputs ):
     if len(trainingInputs) != len(trainingOutputs):
         raise Exception("Input length mismatch with output length!")
-    
+
     outFile = open( csvName, 'w' )
     writer = csv.writer( outFile, lineterminator='\n')
     writer.writerow( [ len(trainingInputs[0]), len(trainingOutputs[0])])
@@ -194,7 +230,7 @@ def readCsv( csvName ):
     for i in range(1, len(contents)):
         inputList.append( contents[i][:inputCnt] )
         outputList.append( contents[i][inputCnt:] )
-    return inputList, outputList 
+    return inputList, outputList
 
 def getRandomInputParams( config ):
     inputCnt = config.getShape()[0]
@@ -211,7 +247,7 @@ def getRandomOutputParams( config ):
     return params
 
 
-def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueue, doneEvent, pydev ):
+def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue, outputQueue, doneEvent, pydev ):
     # Work around low-memory GPU issue
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     import tensorflow as tf
@@ -239,7 +275,7 @@ def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueu
     lastSaved = 0
     while not doneEvent.is_set():
         try:
-            valid, params = inputQueue.get(block=True, timeout=1)
+            valid, params = inputQueue.get(block=False, timeout=1)
             inputs = params[:inputCnt]
             outputs = params[inputCnt:]
 
@@ -265,8 +301,10 @@ def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueu
                 epochs = 1
                 if len(trainingInputs) > 25000:
                     epochs = 100
-                for i in range(epochs):
-                    neuralNet.train_on_batch( np.array(trainingInputs), np.array(trainingOutputs) )
+
+                neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs)
+                #for i in range(epochs):
+                    #neuralNet.train_on_batch( np.array(trainingInputs), np.array(trainingOutputs) )
 
                 if len(trainingInputs) % 50 == 0 and lastSaved != len(trainingInputs):
                     print("Saving...")
@@ -284,10 +322,13 @@ def neural_net_proc( config, modelFile, initialEncodings, inputQueue, outputQueu
 
 
             else:
-                if outputQueue.empty():
+                try:
+                    # Note: This block is what limits thread CPU usage
+                    outputQueue.put( getRandomOutputParams(config), block=True, timeout=1 )
+                except:
+                    pass
                     # Bored? Add a random param
                     #inputQueue.put( ( False, getRandomInputParams(config) ) )
-                    outputQueue.put( getRandomOutputParams(config) )
 
 
     print("Saving before exit...")
