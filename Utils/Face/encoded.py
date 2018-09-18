@@ -51,8 +51,8 @@ class EncodedFace:
 
 
     @staticmethod
-    def batchEncode( imageList ):
-        encodings, landmarks = face_recognition.batch_face_encodings_and_landmarks( imageList, landmark_model="large" )
+    def batchEncode( imageList, batch_size = 128 ):
+        encodings, landmarks = face_recognition.batch_face_encodings_and_landmarks( imageList, landmark_model="large", batch_size=batch_size )
         
         encodedList = []
         for data in zip(encodings,landmarks, imageList):

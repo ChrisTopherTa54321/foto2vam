@@ -43,7 +43,7 @@ def main( args ):
     print("Shape is {}".format(config.getShape()))
 
     print("Starting child processes...")
-    encBatchSize = 16
+    encBatchSize = args.encBatchSize
     trainBatchSize = 512
     morph2imageQueue = multiprocessing.Queue()
     image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
@@ -119,7 +119,7 @@ def createEncodings( fileList ):
     imageList = []
     for file in fileList:
         imageList.append( np.array( Image.open(file) ) )
-    encodedFaces = EncodedFace.batchEncode( imageList )
+    encodedFaces = EncodedFace.batchEncode( imageList, batch_size=32 )
 
     #hack
     for face in encodedFaces:
@@ -201,7 +201,6 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
                 elapsed = time.time() - start
                 print("Work done in {}  ({} per sample)!".format( elapsed, elapsed/len(pathList)))
                 pathList.clear()
-                batchSize *= 2
             except Exception as e:
                 print( str(e) )
                 
@@ -291,9 +290,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 if len(trainingInputs) > 25000:
                     epochs = 100
 
-                neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs)
-                #for i in range(epochs):
-                    #neuralNet.train_on_batch( np.array(trainingInputs), np.array(trainingOutputs) )
+                neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=0)
 
                 if len(trainingInputs) % 50 == 0 and lastSaved != len(trainingInputs):
                     print("Saving...")
@@ -377,6 +374,7 @@ def parseArgs():
     parser = argparse.ArgumentParser( description="Train GAN" )
     parser.add_argument('--configFile', help="Model configuration file", required=True)
     parser.add_argument('--imagePath', help="Root path for seed images", required=True)
+    parser.add_argument('--encBatchSize', help="Batch size for generating encodings", default=64)
     #parser.add_argument('--inputGlob', help="Glob for input images", default="D:/real/*.png")
     parser.add_argument('--outputFile', help="File to write output model to", default="output.model")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")

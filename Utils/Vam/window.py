@@ -146,7 +146,7 @@ class VamWindow:
         msg["angles"] = angles
         msg["json"] = jsonPath
         msg["outputPath"] = jsonPath
-        msg["dimensions"] = [ 512, 512 ]
+        msg["dimensions"] = [ 256, 256 ]
         self._writeToPipe( pipe, json.dumps(msg))
 
     def syncPipe(self, pipe ):
