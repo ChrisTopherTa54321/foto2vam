@@ -9,8 +9,11 @@ class Config:
     CONFIG_VERSION = 1
 
     def __init__(self, configJson ):
-        self._baseFace = VamFace( configJson["baseJson"] )
+        minJson = configJson["minJson"] if "minJson" in configJson else None
+        maxJson = configJson["maxJson"] if "maxJson" in configJson else None
+        self._baseFace = VamFace( configJson["baseJson"], minJson, maxJson )
         self._baseFace.trimToAnimatable()
+
         self._paramShape = None
         angles = set()
         self._input_params = []
@@ -28,7 +31,7 @@ class Config:
                 except:
                     print("Error parsing parameter")
 
-        
+
         self._output_params = []
         if "outputs" in configJson:
             outputs = configJson["outputs"]
@@ -63,7 +66,7 @@ class Config:
 
     def getShape(self):
         return self._paramShape
-    
+
     def getAngles(self):
         return self._angles
 

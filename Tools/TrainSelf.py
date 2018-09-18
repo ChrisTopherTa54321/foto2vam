@@ -9,6 +9,10 @@ import tempfile
 import shutil
 import time
 import pickle
+import random
+import copy
+from win32api import GetKeyState
+from win32con import VK_SCROLL
 
 NORMALIZE_SIZE=150
 
@@ -44,12 +48,11 @@ def main( args ):
 
     print("Starting child processes...")
     encBatchSize = args.encBatchSize
-    trainBatchSize = 512
-    morph2imageQueue = multiprocessing.Queue()
+    trainBatchSize = 256
+    morph2imageQueue = multiprocessing.Queue(maxsize=2*encBatchSize)
     image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
     encoding2morphQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
-
 
     # Set up worker processes
     procs = []
@@ -76,8 +79,22 @@ def main( args ):
         except:
             pass
 
-    input("Press Enter to exit...")
+    print("Enable ScrollLock to exit")
+    while True:
+        if GetKeyState(VK_SCROLL):
+            break
+        time.sleep(1)
 
+        # image2encoding dies from OOM fairly often. Restart it if that happens
+        if not image2encoding.is_alive():
+            print("Restarting Image2Encoding process!")
+            procs.remove( image2encoding )
+            image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, args.pydev ) )
+            image2encoding.start()
+            procs.append( image2encoding )
+
+
+    print("Waiting for processes to exit...")
     # Wait for children to finish
     doneEvent.set()
     for proc in procs:
@@ -185,25 +202,34 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
 
         if submitWork:
             try:
-                start = time.time()
-                print("Submitting {} samples to GPU".format(len(pathList)))
                 encodings = getEncodingsFromPaths( pathList, recursive=False, cache = False )
                 for data in zip( pathList, encodings ):
                     try:
                         params = config.generateParams( data[1] + [os.path.join( data[0], "face.json") ] )
                         params_valid = True
+                        outputQueue.put( ( params_valid, params ) )
                     except Exception as e:
                         # If encoding failed then feed a non-trainable random encoding to the output
-                        params = getRandomInputParams( config )
-                        params_valid = False
-                    outputQueue.put( ( params_valid, params ) )
-                    shutil.rmtree( data[0], ignore_errors=True)
-                elapsed = time.time() - start
-                print("Work done in {}  ({} per sample)!".format( elapsed, elapsed/len(pathList)))
-                pathList.clear()
+                        #params = getRandomInputParams( config )
+                        #params_valid = False
+                        pass
+                    #outputQueue.put( ( params_valid, params ) )
+                    #shutil.rmtree( data[0], ignore_errors=True)
+            except RuntimeError as e:
+                # Probably OOM. Kill the process
+                print("RunTime error! Process is exiting")
+                raise SystemExit()
             except Exception as e:
                 print( str(e) )
-                
+            finally:
+                for path in pathList:
+                    try:
+                        shutil.rmtree( path, ignore_errors=True)
+                    except:
+                        pass
+                pathList.clear()
+
+
 
 
 
@@ -218,7 +244,7 @@ def saveTrainingData( dataName, trainingInputs, trainingOutputs ):
 def readTrainingData( dataName ):
     dataFile = open( dataName, "rb" )
     inputList, outputList = pickle.load( dataFile )
-    return inputList, outputList
+    return list(inputList), list(outputList)
 
 def getRandomInputParams( config ):
     inputCnt = config.getShape()[0]
@@ -227,12 +253,53 @@ def getRandomInputParams( config ):
     params = params + [0]*outputCnt
     return params
 
-def getRandomOutputParams( config ):
+def getRandomOutputParams( config, trainingMorphsList ):
+
+    newFace = copy.deepcopy(config.getBaseFace())
+
+    if len(trainingMorphsList) > 10:
+        randomIdxs = random.sample( range(len(trainingMorphsList)), 2 )
+
+        newFaceMorphs = trainingMorphsList[randomIdxs[0]]
+        newFace.importFloatList( newFaceMorphs )
+
+        mutateChance = .6
+        mateChance = .7
+
+        # Randomly take parameters from the other face
+        shouldMate = random.random() < mateChance
+        shouldMutate = random.random() < mutateChance
+        if shouldMate or shouldMutate:
+            if shouldMate:
+                face2Morphs = trainingMorphsList[randomIdxs[1]]
+                face2 = copy.deepcopy( config.getBaseFace() )
+                face2.importFloatList( face2Morphs )
+                mate(newFace, face2, random.randint(1, len(newFace.morphFloats)))
+
+            # Randomly apply mutations to the current face
+            if shouldMutate:
+                mutate(newFace, random.randint(0,random.randint(1,50)) )
+    else:
+        newFace.randomize()
+
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
     params = [0]*inputCnt
-    params = params + list( np.random.normal(-1,1, outputCnt ) )
+    params = params + newFace.morphFloats
     return params
+
+def mutate(face, mutationCount):
+    for i in range(mutationCount):
+        face.randomize( random.randint(0, len(face.morphFloats) - 1 ) )
+
+
+def mate(targetFace, otherFace, mutationCount ):
+    if len(targetFace.morphFloats) != len(otherFace.morphFloats):
+        raise Exception("Morph float list didn't match! {} != {}".format(len(targetFace.morphFloats), len(otherFace.morphFloats)))
+    for i in range(mutationCount):
+        morphIdx = random.randint(0, len(otherFace.morphFloats) - 1)
+        targetFace.morphFloats[morphIdx] = otherFace.morphFloats[morphIdx]
+
 
 
 def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue, outputQueue, doneEvent, pydev ):
@@ -260,7 +327,10 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
         print("Read {} training samples".format(len(trainingInputs)))
     batches = 0
     targetBatches = 0
-    lastSaved = 0
+    epochs=1
+    pendingSave = False
+    lastSave = time.time()
+
     while not doneEvent.is_set():
         try:
             valid, params = inputQueue.get(block=False, timeout=1)
@@ -271,46 +341,55 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
             if valid:
                 trainingInputs.append( inputs )
                 trainingOutputs.append( outputs )
+                if time.time() > lastSave + 5*60 and len(trainingInputs) % 50 == 0:
+                    pendingSave = True
                 targetBatches += 1
-                print( "{} valid faces".format( len(trainingInputs) ) )
+                #print( "{} valid faces".format( len(trainingInputs) ) )
+
+            if len(trainingInputs) % 100 == 0:
+               # Periodically re-enqueue the initial encodings
+                for encoding in initialEncodings:
+                    try:
+                        params = config.generateParams(encoding)
+                        inputQueue.put( ( False, params ) )
+                    except:
+                        pass
 
             # Don't use predictions until we have trained a bit
-            if len(trainingInputs) > 10000:
+            if len(trainingInputs) > 10000 and valid:
                 # Now given the encoding, what morphs would we have predicted?
                 predictedOutputs = create_prediction( neuralNet, np.array([inputs]) )
                 predictedParams = inputs + list(predictedOutputs[0])
                 outputQueue.put( predictedParams )
 
-            outputQueue.put( getRandomOutputParams(config) )
+            outputQueue.put( getRandomOutputParams(config, trainingOutputs) )
 
         except queue.Empty:
-            if batches < targetBatches and len(trainingInputs) > 1000:
+            if True or ( batches < targetBatches and len(trainingInputs) > 1000 ):
                 batches += 1
                 epochs = 1
-                if len(trainingInputs) > 25000:
-                    epochs = 100
+                #if len(trainingInputs) > 25000:
+                #    epochs = 5
 
-                neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=0)
+                try:
+                    for i in range(20):
+                        outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False )
+                except:
+                    neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
 
-                if len(trainingInputs) % 50 == 0 and lastSaved != len(trainingInputs):
+
+                if pendingSave:
                     print("Saving...")
                     neuralNet.save( modelFile )
                     saveTrainingData( dataName, trainingInputs, trainingOutputs)
-                    lastSaved = len(trainingInputs)
-
-                    # Periodically re-enqueue the initial encodings
-                    for encoding in initialEncodings:
-                        try:
-                            params = config.generateParams(encoding)
-                            inputQueue.put( ( False, params ) )
-                        except:
-                            pass
+                    pendingSave = False
+                    lastSave = time.time()
 
 
             else:
                 try:
                     # Note: This block is what limits thread CPU usage
-                    outputQueue.put( getRandomOutputParams(config), block=True, timeout=1 )
+                    outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False, timeout=1 )
                 except:
                     pass
                     # Bored? Add a random param
@@ -326,7 +405,7 @@ def create_prediction( nn, input ):
     prediction = nn.predict(input)
 
     #limit range of output
-    prediction = np.around(np.clip(prediction, -1.5, 1.5 ),3)
+    #prediction = np.around(np.clip(prediction, -1.5, 1.5 ),3)
     return prediction
 
 
@@ -341,15 +420,21 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
 
     model = Sequential()
 
-    model.add(Dense( 8*inputCnt + 2*outputCnt, input_shape=(inputCnt,), kernel_initializer='random_uniform'))
+    model.add(Dense( 8*inputCnt + 2*outputCnt, input_shape=(inputCnt,), activation='linear', kernel_initializer='random_uniform'))
     model.add(LeakyReLU(alpha=0.2))
     model.add(Dropout(.2))
     #model.add(BatchNormalization(momentum=0.8))
-    model.add(Dense(3*inputCnt + 2*outputCnt, kernel_initializer='random_uniform'))
+    model.add(Dense(3*inputCnt + 2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(Dropout(.2))
+    model.add(Dense(3*inputCnt + 2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(Dropout(.2))
+    model.add(Dense(3*inputCnt + 2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
     model.add(LeakyReLU(alpha=0.2))
     model.add(Dropout(.2))
     #model.add(BatchNormalization(momentum=0.8))
-    model.add(Dense(2*outputCnt, kernel_initializer='random_uniform'))
+    model.add(Dense(2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
     model.add(LeakyReLU(alpha=0.2))
     model.add(Dropout(.2))
     model.add(Dense(outputCnt, activation='linear'))
@@ -361,7 +446,7 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
     nn = Model( input, predictor )
 
     optimizer = Adam(0.0002, 0.5)
-    nn.compile(loss='binary_crossentropy',
+    nn.compile(loss='logcosh',
             optimizer=optimizer,
             metrics=['accuracy'])
 
