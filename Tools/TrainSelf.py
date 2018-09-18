@@ -8,7 +8,7 @@ import numpy as np
 import tempfile
 import shutil
 import time
-import csv
+import pickle
 
 NORMALIZE_SIZE=150
 
@@ -208,28 +208,17 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
 
 
 
-def saveCsv( csvName, trainingInputs, trainingOutputs ):
+def saveTrainingData( dataName, trainingInputs, trainingOutputs ):
     if len(trainingInputs) != len(trainingOutputs):
         raise Exception("Input length mismatch with output length!")
 
-    outFile = open( csvName, 'w' )
-    writer = csv.writer( outFile, lineterminator='\n')
-    writer.writerow( [ len(trainingInputs[0]), len(trainingOutputs[0])])
-    for idx in range(len(trainingInputs)):
-        writer.writerow( trainingInputs[idx] + trainingOutputs[idx] )
+    outFile = open( dataName, 'wb' )
+    pickle.dump( ( trainingInputs, trainingOutputs ), outFile )
     outFile.close()
 
-def readCsv( csvName ):
-    inputList = []
-    outputList = []
-    with open(csvName, newline='\n') as f_input:
-        contents = [list(map(float, row)) for row in csv.reader(f_input)]
-    inputCnt,outputCnt = contents[0]
-    inputCnt = int(inputCnt)
-    outputCnt = int(outputCnt)
-    for i in range(1, len(contents)):
-        inputList.append( contents[i][:inputCnt] )
-        outputList.append( contents[i][inputCnt:] )
+def readTrainingData( dataName ):
+    dataFile = open( dataName, "rb" )
+    inputList, outputList = pickle.load( dataFile )
     return inputList, outputList
 
 def getRandomInputParams( config ):
@@ -259,7 +248,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
         import pydevd
         pydevd.settrace(suspend=False)
 
-    csvName = modelFile + ".csv"
+    dataName = modelFile + ".train"
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
 
@@ -267,8 +256,8 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
     trainingOutputs = []
 
     neuralNet = create_neural_net( inputCnt, outputCnt, modelFile )
-    if os.path.exists( csvName ):
-        trainingInputs,trainingOutputs = readCsv( csvName )
+    if os.path.exists( dataName ):
+        trainingInputs,trainingOutputs = readTrainingData( dataName )
         print("Read {} training samples".format(len(trainingInputs)))
     batches = 0
     targetBatches = 0
@@ -309,7 +298,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 if len(trainingInputs) % 50 == 0 and lastSaved != len(trainingInputs):
                     print("Saving...")
                     neuralNet.save( modelFile )
-                    saveCsv( csvName, trainingInputs, trainingOutputs)
+                    saveTrainingData( dataName, trainingInputs, trainingOutputs)
                     lastSaved = len(trainingInputs)
 
                     # Periodically re-enqueue the initial encodings
@@ -333,7 +322,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
 
     print("Saving before exit...")
     neuralNet.save( modelFile )
-    saveCsv( csvName, trainingInputs, trainingOutputs)
+    saveTrainingData( dataName, trainingInputs, trainingOutputs)
     print("Save complete.")
 
 def create_prediction( nn, input ):
