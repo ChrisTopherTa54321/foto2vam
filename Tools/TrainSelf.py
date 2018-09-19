@@ -12,7 +12,7 @@ import pickle
 import random
 import copy
 from win32api import GetKeyState
-from win32con import VK_SCROLL
+from win32con import VK_SCROLL, VK_CAPITAL
 
 NORMALIZE_SIZE=150
 
@@ -53,6 +53,7 @@ def main( args ):
     image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
     encoding2morphQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
+    encodingDiedEvent = multiprocessing.Event()
 
     # Set up worker processes
     procs = []
@@ -60,7 +61,7 @@ def main( args ):
     procs.append(morphs2image)
 
     # Multiple encoding threads
-    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, args.pydev ) )
+    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, encodingDiedEvent, args.pydev ) )
     procs.append( image2encoding )
 
     neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, args.pydev ) )
@@ -86,10 +87,15 @@ def main( args ):
         time.sleep(1)
 
         # image2encoding dies from OOM fairly often. Restart it if that happens
-        if not image2encoding.is_alive():
+        if not image2encoding.is_alive() or encodingDiedEvent.is_set():
             print("Restarting Image2Encoding process!")
+            encodingDiedEvent.clear()
             procs.remove( image2encoding )
-            image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, args.pydev ) )
+            if image2encoding.is_alive():
+                print("Terminating stuck process..")
+                image2encoding.join(5)
+                image2encoding.terminate()
+            image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, encodingDiedEvent, args.pydev ) )
             image2encoding.start()
             procs.append( image2encoding )
 
@@ -117,13 +123,14 @@ def getEncodingsFromPaths( imagePaths, recursive = True, cache = False ):
                 break
 
     # Now batch create the encodings!
-    batched_encodings = createEncodings( fileList )
+    if len(fileList) > 0:
+        batched_encodings = createEncodings( fileList )
 
     # Now unflatten the batched encodings
     idx = 0
     for encoding in encodings:
         for i in range(len(encoding)):
-            encoding[i] = batched_encodings[i]
+            encoding[i] = batched_encodings[idx]
             idx += 1
 
     return encodings
@@ -183,7 +190,7 @@ def morphs_to_image_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
             print("Error in morphs_to_image_proc: {}".format(str(e)))
 
 
-def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEvent, pydev ):
+def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEvent, encodingDiedEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
@@ -218,6 +225,7 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
             except RuntimeError as e:
                 # Probably OOM. Kill the process
                 print("RunTime error! Process is exiting")
+                encodingDiedEvent.set()
                 raise SystemExit()
             except Exception as e:
                 print( str(e) )
@@ -262,23 +270,23 @@ def getRandomOutputParams( config, trainingMorphsList ):
 
         newFaceMorphs = trainingMorphsList[randomIdxs[0]]
         newFace.importFloatList( newFaceMorphs )
+        
+        # select which morphs to modify
+        modifyIdxs = random.sample( range(len(newFace.morphFloats)), random.randint(1,50) )
 
-        mutateChance = .6
-        mateChance = .7
+        # How will we modify them?
+        rand = random.random()
+        if rand < .4:
+            face2Morphs = trainingMorphsList[randomIdxs[1]]
+            face2 = copy.deepcopy( config.getBaseFace() )
+            face2.importFloatList( face2Morphs )
+            mate(newFace, face2, modifyIdxs )
+        elif rand < .9:
+            for idx in modifyIdxs:
+                newFace.changeMorph( idx, -1 + 2*random.random() )
+        else:
+            mutate(newFace, modifyIdxs )
 
-        # Randomly take parameters from the other face
-        shouldMate = random.random() < mateChance
-        shouldMutate = random.random() < mutateChance
-        if shouldMate or shouldMutate:
-            if shouldMate:
-                face2Morphs = trainingMorphsList[randomIdxs[1]]
-                face2 = copy.deepcopy( config.getBaseFace() )
-                face2.importFloatList( face2Morphs )
-                mate(newFace, face2, random.randint(1, len(newFace.morphFloats)))
-
-            # Randomly apply mutations to the current face
-            if shouldMutate:
-                mutate(newFace, random.randint(0,random.randint(1,50)) )
     else:
         newFace.randomize()
 
@@ -288,17 +296,19 @@ def getRandomOutputParams( config, trainingMorphsList ):
     params = params + newFace.morphFloats
     return params
 
-def mutate(face, mutationCount):
-    for i in range(mutationCount):
-        face.randomize( random.randint(0, len(face.morphFloats) - 1 ) )
+def mutate(face, idxList):
+    for idx in idxList:
+        face.randomize( idx )
 
 
-def mate(targetFace, otherFace, mutationCount ):
+def mate(targetFace, otherFace, idxList ):
     if len(targetFace.morphFloats) != len(otherFace.morphFloats):
         raise Exception("Morph float list didn't match! {} != {}".format(len(targetFace.morphFloats), len(otherFace.morphFloats)))
-    for i in range(mutationCount):
-        morphIdx = random.randint(0, len(otherFace.morphFloats) - 1)
-        targetFace.morphFloats[morphIdx] = otherFace.morphFloats[morphIdx]
+    for idx in idxList:
+        weightA = random.randint(1,100)
+        weightB = 100 - weightA
+        matedValue = ( ( weightA * targetFace.morphFloats[idx] ) + ( weightB * otherFace.morphFloats[idx] ) ) / ( weightA + weightB )
+        targetFace.morphFloats[idx] = matedValue
 
 
 
@@ -341,7 +351,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
             if valid:
                 trainingInputs.append( inputs )
                 trainingOutputs.append( outputs )
-                if time.time() > lastSave + 5*60 and len(trainingInputs) % 50 == 0:
+                if time.time() > lastSave + 10*60 and len(trainingInputs) % 50 == 0:
                     pendingSave = True
                 targetBatches += 1
                 #print( "{} valid faces".format( len(trainingInputs) ) )
@@ -372,16 +382,21 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 #    epochs = 5
 
                 try:
-                    for i in range(20):
+                    while True:
                         outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False )
                 except:
-                    neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
+                    while True:
+                        neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
+                        if not GetKeyState(VK_CAPITAL):
+                            break
+                        
 
 
                 if pendingSave:
                     print("Saving...")
                     neuralNet.save( modelFile )
                     saveTrainingData( dataName, trainingInputs, trainingOutputs)
+                    print("Save complete!")
                     pendingSave = False
                     lastSave = time.time()
 

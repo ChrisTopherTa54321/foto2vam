@@ -204,6 +204,12 @@ class VamFace:
         with open(filename, 'w') as outfile:
             json.dump(self.jsonData, outfile, indent=3)
 
+    # randomize all face values
+    def changeMorph(self, morphIdx, delta):
+        newValue = self.morphFloats[morphIdx] + delta
+        newValue = max( self.morphInfo[morphIdx]['min'], newValue )
+        newValue = min( self.morphInfo[morphIdx]['max'], newValue )
+        self.morphFloats[morphIdx] = newValue
 
     # randomize all face values
     def randomize(self, morphIdx = None):
