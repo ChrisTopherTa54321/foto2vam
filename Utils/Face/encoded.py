@@ -44,14 +44,14 @@ class EncodedFace:
             self._landmarks = face_recognition.face_landmarks(self._img)[0]
         except:
             raise Exception("Failed to find face in image")
-        (_, self._angle, _) = self._estimatePose(self._img.shape[0:2], self._landmarks, debugPose = debugPose)
+        (_, self._angle, _) = self._estimatePose(debugPose = debugPose)
 
         if not keepImg:
             self._img = None
 
 
     @staticmethod
-    def batchEncode( imageList, batch_size = 128 ):
+    def batchEncode( imageList, batch_size = 128, keepImage = False, debugPose = False ):
         encodings, landmarks = face_recognition.batch_face_encodings_and_landmarks( imageList, landmark_model="large", batch_size=batch_size )
         
         encodedList = []
@@ -60,7 +60,11 @@ class EncodedFace:
                 encodedFace = EncodedFace(None)
                 encodedFace._encodings = list(data[0][0])
                 encodedFace._landmarks = data[1][0]
-                _, encodedFace._angle, _ = encodedFace._estimatePose( data[2].shape, encodedFace._landmarks )
+                encodedFace._img = data[2] 
+                _, encodedFace._angle, _ = encodedFace._estimatePose( debugPose = debugPose )
+                
+                if not keepImage:
+                    encodedFace._img = None
             else:
                 encodedFace = None
             encodedList.append(encodedFace)
@@ -82,7 +86,11 @@ class EncodedFace:
 
 
     # Determine angle the face is facing
-    def _estimatePose(self, img_size, landmarks, debugPose = False):
+    def _estimatePose(self, img_size = None , landmarks = None, debugPose = False):
+        if img_size is None:
+            img_size = self._img.shape
+        if landmarks is None:
+            landmarks = self._landmarks
         # 2D image points. Adapted from https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
         image_points = numpy.array([
                                     landmarks['nose_bridge'][3],  # Nose tip
@@ -197,6 +205,9 @@ class EncodedFace:
 
     def getAngle(self):
         return self._angle
+    
+    def getImage(self):
+        return self._img
 
     def getEncodings(self):
         return list(self._encodings)
@@ -208,7 +219,7 @@ class EncodedFace:
         return self._region
 
     def compare(self, otherFace):
-        return face_recognition.face_distance([self._encodings], otherFace._encodings).mean()
+        return face_recognition.face_distance([numpy.array(self._encodings)], numpy.array(otherFace._encodings)).mean()
 
     def getEncodingJson(self):
         return { 'angle': self._angle, 'landmarks': self._landmarks, 'encoding': self._encodings.tolist(), 'encoding_format': self.ENCODING_TYPE, 'encoding_version': self.ENCODING_VERSION }
@@ -219,12 +230,15 @@ class EncodedFace:
             json.dump(jsonData, outfile)
 
     def saveImage(self, filename, landmarks=True):
-        if not self._img:
+        if self._img is None:
             raise Exception("Image was not saved in constructor!")
 
-        img = self._img
+        if isinstance( self._img, numpy.ndarray ):
+            img = Image.fromarray( self._img )
+        else:
+            img = self._img
         if landmarks:
-            draw = ImageDraw.Draw(self._img)
+            draw = ImageDraw.Draw(img)
             for key, val in self._landmarks.items():
                 draw.point(val)
 

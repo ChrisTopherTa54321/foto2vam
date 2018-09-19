@@ -118,7 +118,8 @@ def getEncodingsFromPaths( imagePaths, recursive = True, cache = False ):
                 if file.endswith( ( '.png', '.jpg' ) ):
                     fileList.append( os.path.join( root, file ) )
                     encoding.append(None)
-            encodings.append(encoding)
+            if len(encoding) > 0:
+                encodings.append(encoding)
             if not recursive:
                 break
 
@@ -143,15 +144,8 @@ def createEncodings( fileList ):
     imageList = []
     for file in fileList:
         imageList.append( np.array( Image.open(file) ) )
-    encodedFaces = EncodedFace.batchEncode( imageList, batch_size=32 )
+    encodedFaces = EncodedFace.batchEncode( imageList, batch_size=32, keepImage = True )
 
-    #hack
-    for face in encodedFaces:
-        if face is None:
-            continue
-
-        if face.getAngle() < 0:
-            face._angle= -face._angle
     return encodedFaces
 
 
@@ -212,6 +206,8 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
                 encodings = getEncodingsFromPaths( pathList, recursive=False, cache = False )
                 for data in zip( pathList, encodings ):
                     try:
+                        if not validatePerson( data[1] ):
+                            raise Exception("Image failed validation!")
                         params = config.generateParams( data[1] + [os.path.join( data[0], "face.json") ] )
                         params_valid = True
                         outputQueue.put( ( params_valid, params ) )
@@ -238,7 +234,40 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
                 pathList.clear()
 
 
+def validatePerson( encodingList ):
+    ok = samePerson( encodingList, tolerance=0.6 )
+    for encoding in encodingList:
+        if not ok:
+            break
+        valid = landmarksValid( encoding )
+        ok = valid > 0.9
+    return ok
+        
 
+def samePerson( encodingList, tolerance=.6 ):
+     for idx,encoding in enumerate(encodingList):
+         for encoding2 in encodingList[idx+1:]:
+             if encoding.compare(encoding2) > tolerance:
+                 return False
+     return True
+
+
+def landmarksValid( encoding ):
+    landmarks = encoding.getLandmarks()
+    img = encoding.getImage()
+    bgColor = img[0][0]
+    
+    totalPoints = 0
+    invalidPoints = 0
+    for feature,points in landmarks.items():
+        for point in points:
+            totalPoints += 1
+            try:
+                if (img[point[0]][point[1]] == bgColor).all():
+                    invalidPoints += 1
+            except IndexError:
+                invalidPoints += 1
+    return (totalPoints-invalidPoints)/totalPoints
 
 
 def saveTrainingData( dataName, trainingInputs, trainingOutputs ):
