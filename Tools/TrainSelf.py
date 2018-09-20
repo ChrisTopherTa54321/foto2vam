@@ -49,7 +49,7 @@ def main( args ):
     print("Starting child processes...")
     encBatchSize = args.encBatchSize
     trainBatchSize = 256
-    morph2imageQueue = multiprocessing.Queue(maxsize=2*encBatchSize)
+    morph2imageQueue = multiprocessing.Queue(maxsize=4*encBatchSize)
     image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
     encoding2morphQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
@@ -308,6 +308,7 @@ def readTrainingData( dataName ):
 def getRandomOutputParams( config, trainingMorphsList ):
 
     newFace = copy.deepcopy(config.getBaseFace())
+    morphLists = []
 
     if len(trainingMorphsList) > 10:
         randomIdxs = random.sample( range(len(trainingMorphsList)), 2 )
@@ -320,25 +321,43 @@ def getRandomOutputParams( config, trainingMorphsList ):
 
         # How will we modify them?
         rand = random.random()
-        if rand < .4:
+        if rand < .6:
             face2Morphs = trainingMorphsList[randomIdxs[1]]
             face2 = copy.deepcopy( config.getBaseFace() )
             face2.importFloatList( face2Morphs )
             mate(newFace, face2, modifyIdxs )
+            morphLists.append( newFace.morphFloats + [] )
         elif rand < .9:
             for idx in modifyIdxs:
                 newFace.changeMorph( idx, -1 + 2*random.random() )
+                morphLists.append( newFace.morphFloats + [] )
+        elif rand < .94:
+            numSteps = random.randint(5,15)
+            for idx in modifyIdxs:
+                face2 = copy.deepcopy( newFace )
+                minVal = face2.morphInfo[idx]['min']
+                maxVal = face2.morphInfo[idx]['max']
+                stepSize = ( maxVal - minVal) / numSteps
+
+                face2.morphFloats[idx] = minVal
+                for step in range(numSteps):
+                    face2.changeMorph( idx, stepSize )
+                    morphLists.append( face2.morphFloats + [] )
         else:
             mutate(newFace, modifyIdxs )
-
+            morphLists.append( newFace.morphFloats + [] )
     else:
         newFace.randomize()
+        morphLists.append( newFace.morphFloats + [] )
 
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
-    params = [0]*inputCnt
-    params = params + newFace.morphFloats
-    return params
+    inputParams = [0]*inputCnt
+
+    retParams = []
+    for morphList in morphLists:
+        retParams.append( inputParams + morphList )
+    return retParams
 
 def mutate(face, idxList):
     for idx in idxList:
@@ -416,7 +435,9 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
         except queue.Empty:
             try:
                 while True:
-                    outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False )
+                    newMorphs = getRandomOutputParams(config, trainingOutputs)
+                    for morph in newMorphs:
+                        outputQueue.put( morph , block=False )
             except:
                 while True:
                     if len(trainingInputs) > 0:
