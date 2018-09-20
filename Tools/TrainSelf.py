@@ -410,7 +410,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 targetBatches += 1
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
-            if len(trainingInputs) % 100 == 0:
+            if len(trainingInputs) > 0 and len(trainingInputs) % 100 == 0:
                # Periodically re-enqueue the initial encodings
                 for encoding in initialEncodings:
                     try:
@@ -426,8 +426,6 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 predictedParams = inputs + list(predictedOutputs[0])
                 outputQueue.put( predictedParams )
 
-            outputQueue.put( getRandomOutputParams(config, trainingOutputs) )
-
         except queue.Empty:
             if True or ( batches < targetBatches and len(trainingInputs) > 1000 ):
                 batches += 1
@@ -440,7 +438,8 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                         outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False )
                 except:
                     while True:
-                        neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
+                        if len(trainingInputs) > 0:
+                            neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
                         if not GetKeyState(VK_CAPITAL):
                             break
 
