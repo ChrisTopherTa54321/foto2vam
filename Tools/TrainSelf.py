@@ -169,7 +169,7 @@ def createEncodings( fileList ):
     imageList = []
     for file in fileList:
         imageList.append( np.array( Image.open(file) ) )
-    encodedFaces = EncodedFace.batchEncode( imageList, batch_size=32, keepImage = True )
+    encodedFaces = EncodedFace.batchEncode( imageList, batch_size=64, keepImage = True )
 
     return encodedFaces
 
@@ -237,12 +237,8 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
                         params_valid = True
                         outputQueue.put( ( params_valid, params ) )
                     except Exception as e:
-                        # If encoding failed then feed a non-trainable random encoding to the output
-                        #params = getRandomInputParams( config )
-                        #params_valid = False
                         pass
-                    #outputQueue.put( ( params_valid, params ) )
-                    #shutil.rmtree( data[0], ignore_errors=True)
+
             except RuntimeError as e:
                 # Probably OOM. Kill the process
                 print("RunTime error! Process is exiting")
@@ -308,12 +304,6 @@ def readTrainingData( dataName ):
     inputList, outputList = pickle.load( dataFile )
     return list(inputList), list(outputList)
 
-def getRandomInputParams( config ):
-    inputCnt = config.getShape()[0]
-    outputCnt = config.getShape()[1]
-    params = list( np.random.normal(-1,1, inputCnt ) )
-    params = params + [0]*outputCnt
-    return params
 
 def getRandomOutputParams( config, trainingMorphsList ):
 
@@ -389,9 +379,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
     if os.path.exists( dataName ):
         trainingInputs,trainingOutputs = readTrainingData( dataName )
         print("Read {} training samples".format(len(trainingInputs)))
-    batches = 0
-    targetBatches = 0
-    epochs=1
+
     pendingSave = False
     lastSave = time.time()
 
@@ -407,7 +395,6 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 trainingOutputs.append( outputs )
                 if time.time() > lastSave + 10*60 and len(trainingInputs) % 50 == 0:
                     pendingSave = True
-                targetBatches += 1
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
             if len(trainingInputs) > 0 and len(trainingInputs) % 100 == 0:
@@ -427,41 +414,25 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 outputQueue.put( predictedParams )
 
         except queue.Empty:
-            if True or ( batches < targetBatches and len(trainingInputs) > 1000 ):
-                batches += 1
-                epochs = 1
-                #if len(trainingInputs) > 25000:
-                #    epochs = 5
-
-                try:
-                    while True:
-                        outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False )
-                except:
-                    while True:
-                        if len(trainingInputs) > 0:
-                            neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
-                        if not GetKeyState(VK_CAPITAL):
-                            break
+            try:
+                while True:
+                    outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False )
+            except:
+                while True:
+                    if len(trainingInputs) > 0:
+                        neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=1, verbose=1)
+                    if not GetKeyState(VK_CAPITAL):
+                        break
 
 
 
-                if pendingSave:
-                    print("Saving...")
-                    neuralNet.save( modelFile )
-                    saveTrainingData( dataName, trainingInputs, trainingOutputs)
-                    print("Save complete!")
-                    pendingSave = False
-                    lastSave = time.time()
-
-
-            else:
-                try:
-                    # Note: This block is what limits thread CPU usage
-                    outputQueue.put( getRandomOutputParams(config, trainingOutputs), block=False, timeout=1 )
-                except:
-                    pass
-                    # Bored? Add a random param
-                    #inputQueue.put( ( False, getRandomInputParams(config) ) )
+            if pendingSave:
+                print("Saving...")
+                neuralNet.save( modelFile )
+                saveTrainingData( dataName, trainingInputs, trainingOutputs)
+                print("Save complete!")
+                pendingSave = False
+                lastSave = time.time()
 
 
     print("Saving before exit...")
