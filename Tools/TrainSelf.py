@@ -80,6 +80,15 @@ def main( args ):
         except:
             pass
 
+    # Any seed json files?
+    if args.seedJsonPath:
+        seedLooks = getLooksFromPath( args.seedJsonPath )
+        # Now match morphs and submit
+        for look in seedLooks:
+            look.matchMorphs( config.getBaseFace() )
+            if len(look.morphFloats ) == config.getShape()[1]:
+                morph2imageQueue.put( [0]*config.getShape()[0] + look.morphFloats )
+
     print("Enable ScrollLock to exit")
     while True:
         if GetKeyState(VK_SCROLL):
@@ -106,6 +115,22 @@ def main( args ):
     for proc in procs:
         proc.join()
 
+
+def getLooksFromPath( seedJsonPath, recursive = True ):
+    from Utils.Face.vam import VamFace
+    lookList = []
+    for root, subdirs, files in os.walk(seedJsonPath):
+        for file in files:
+            if file.endswith( ( '.json'  ) ):
+                try:
+                    newFace = VamFace( os.path.join(root, file ) )
+                    lookList.append(newFace)
+                except:
+                    pass
+        if not recursive:
+            break
+
+    return lookList
 
 def getEncodingsFromPaths( imagePaths, recursive = True, cache = False ):
     # We'll create a flat fileList, and placeholder arrays for the return encodings
@@ -242,7 +267,7 @@ def validatePerson( encodingList ):
         valid = landmarksValid( encoding )
         ok = valid > 0.9
     return ok
-        
+
 
 def samePerson( encodingList, tolerance=.6 ):
      for idx,encoding in enumerate(encodingList):
@@ -256,14 +281,14 @@ def landmarksValid( encoding ):
     landmarks = encoding.getLandmarks()
     img = encoding.getImage()
     bgColor = img[0][0]
-    
+
     totalPoints = 0
     invalidPoints = 0
     for feature,points in landmarks.items():
         for point in points:
             totalPoints += 1
             try:
-                if (img[point[0]][point[1]] == bgColor).all():
+                if (img[point[1]][point[0]] == bgColor).all():
                     invalidPoints += 1
             except IndexError:
                 invalidPoints += 1
@@ -299,7 +324,7 @@ def getRandomOutputParams( config, trainingMorphsList ):
 
         newFaceMorphs = trainingMorphsList[randomIdxs[0]]
         newFace.importFloatList( newFaceMorphs )
-        
+
         # select which morphs to modify
         modifyIdxs = random.sample( range(len(newFace.morphFloats)), random.randint(1,50) )
 
@@ -418,7 +443,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                         neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=epochs, verbose=1)
                         if not GetKeyState(VK_CAPITAL):
                             break
-                        
+
 
 
                 if pendingSave:
@@ -503,6 +528,7 @@ def parseArgs():
     parser = argparse.ArgumentParser( description="Train GAN" )
     parser.add_argument('--configFile', help="Model configuration file", required=True)
     parser.add_argument('--imagePath', help="Root path for seed images", required=True)
+    parser.add_argument('--seedJsonPath', help="Path to JSON looks to seed training with", default=None)
     parser.add_argument('--encBatchSize', help="Batch size for generating encodings", default=64)
     #parser.add_argument('--inputGlob', help="Glob for input images", default="D:/real/*.png")
     parser.add_argument('--outputFile', help="File to write output model to", default="output.model")

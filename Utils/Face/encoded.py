@@ -52,17 +52,16 @@ class EncodedFace:
 
     @staticmethod
     def batchEncode( imageList, batch_size = 128, keepImage = False, debugPose = False ):
-        encodings, landmarks = face_recognition.batch_face_encodings_and_landmarks( imageList, landmark_model="large", batch_size=batch_size )
-        
+        encodings, landmarks = face_recognition.batch_face_encodings_and_landmarks( imageList, landmark_model="large", batch_size=batch_size, location_model="hog" )
         encodedList = []
         for data in zip(encodings,landmarks, imageList):
             if len(data[0]) > 0:
                 encodedFace = EncodedFace(None)
                 encodedFace._encodings = list(data[0][0])
                 encodedFace._landmarks = data[1][0]
-                encodedFace._img = data[2] 
+                encodedFace._img = data[2]
                 _, encodedFace._angle, _ = encodedFace._estimatePose( debugPose = debugPose )
-                
+
                 if not keepImage:
                     encodedFace._img = None
             else:
@@ -205,7 +204,7 @@ class EncodedFace:
 
     def getAngle(self):
         return self._angle
-    
+
     def getImage(self):
         return self._img
 
