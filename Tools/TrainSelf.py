@@ -49,7 +49,7 @@ def main( args ):
     print("Starting child processes...")
     encBatchSize = args.encBatchSize
     trainBatchSize = 256
-    morph2imageQueue = multiprocessing.Queue(maxsize=4*encBatchSize)
+    morph2imageQueue = multiprocessing.Queue()
     image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
     encoding2morphQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
@@ -305,10 +305,17 @@ def readTrainingData( dataName ):
     return list(inputList), list(outputList)
 
 
-def getRandomOutputParams( config, trainingMorphsList ):
+def queueRandomOutputParams( config, trainingMorphsList, queue ):
+    inputCnt = config.getShape()[0]
+    outputCnt = config.getShape()[1]
+    inputParams = [0]*inputCnt
 
     newFace = copy.deepcopy(config.getBaseFace())
-    morphLists = []
+
+    # Choose random number to decide what modification we apply
+    rand = random.random()
+    # select which morphs to modify
+    modifyIdxs = random.sample( range(len(newFace.morphFloats)), random.randint(1,25) )
 
     if len(trainingMorphsList) > 10:
         randomIdxs = random.sample( range(len(trainingMorphsList)), 2 )
@@ -316,23 +323,18 @@ def getRandomOutputParams( config, trainingMorphsList ):
         newFaceMorphs = trainingMorphsList[randomIdxs[0]]
         newFace.importFloatList( newFaceMorphs )
 
-        # select which morphs to modify
-        modifyIdxs = random.sample( range(len(newFace.morphFloats)), random.randint(1,50) )
-
-        # How will we modify them?
-        rand = random.random()
         if rand < .6:
             face2Morphs = trainingMorphsList[randomIdxs[1]]
             face2 = copy.deepcopy( config.getBaseFace() )
             face2.importFloatList( face2Morphs )
             mate(newFace, face2, modifyIdxs )
-            morphLists.append( newFace.morphFloats + [] )
+            queue.put_nowait( inputParams + newFace.morphFloats )
         elif rand < .9:
             for idx in modifyIdxs:
                 newFace.changeMorph( idx, -1 + 2*random.random() )
-                morphLists.append( newFace.morphFloats + [] )
-        elif rand < .94:
-            numSteps = random.randint(5,15)
+                queue.put_nowait( inputParams + newFace.morphFloats )
+        elif rand < .95:
+            numSteps = 5#random.randint(5,15)
             for idx in modifyIdxs:
                 face2 = copy.deepcopy( newFace )
                 minVal = face2.morphInfo[idx]['min']
@@ -340,24 +342,21 @@ def getRandomOutputParams( config, trainingMorphsList ):
                 stepSize = ( maxVal - minVal) / numSteps
 
                 face2.morphFloats[idx] = minVal
+                queue.put( inputParams + face2.morphFloats )
                 for step in range(numSteps):
                     face2.changeMorph( idx, stepSize )
-                    morphLists.append( face2.morphFloats + [] )
+                    queue.put( inputParams + face2.morphFloats )
         else:
             mutate(newFace, modifyIdxs )
-            morphLists.append( newFace.morphFloats + [] )
+            queue.put_nowait( inputParams + newFace.morphFloats )
     else:
-        newFace.randomize()
-        morphLists.append( newFace.morphFloats + [] )
+        # 90% chance to use baseface, otherwise completely random morphs.
+        if rand < .9:
+            mutate(newFace, modifyIdxs )
+        else:
+            newFace.randomize()
+        queue.put_nowait( inputParams + newFace.morphFloats )
 
-    inputCnt = config.getShape()[0]
-    outputCnt = config.getShape()[1]
-    inputParams = [0]*inputCnt
-
-    retParams = []
-    for morphList in morphLists:
-        retParams.append( inputParams + morphList )
-    return retParams
 
 def mutate(face, idxList):
     for idx in idxList:
@@ -401,7 +400,8 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
 
     pendingSave = False
     lastSave = time.time()
-
+    outputQueueSize = 256
+    outputQueueSaveSize = 1024
     while not doneEvent.is_set():
         try:
             valid, params = inputQueue.get(block=False, timeout=1)
@@ -412,7 +412,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
             if valid:
                 trainingInputs.append( inputs )
                 trainingOutputs.append( outputs )
-                if time.time() > lastSave + 10*60 and len(trainingInputs) % 50 == 0:
+                if time.time() > lastSave + 30*60 and len(trainingInputs) % 50 == 0:
                     pendingSave = True
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
@@ -432,13 +432,15 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 predictedParams = inputs + list(predictedOutputs[0])
                 outputQueue.put( predictedParams )
 
-        except queue.Empty:
+        except queue.Empty as e:
+            # Been having issue with Queue Empty falsely triggering...
+            if inputQueue.qsize() > 10:
+                continue
+            reqdSize = outputQueueSaveSize if pendingSave else outputQueueSize
             try:
-                while True:
-                    newMorphs = getRandomOutputParams(config, trainingOutputs)
-                    for morph in newMorphs:
-                        outputQueue.put( morph , block=False )
-            except:
+                while outputQueue.qsize() < reqdSize:
+                    queueRandomOutputParams(config, trainingOutputs, outputQueue)
+            finally:
                 while True:
                     if len(trainingInputs) > 0:
                         neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=1, verbose=1)
@@ -446,18 +448,27 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                         break
 
 
-
             if pendingSave:
                 print("Saving...")
                 neuralNet.save( modelFile )
                 saveTrainingData( dataName, trainingInputs, trainingOutputs)
                 print("Save complete!")
-                pendingSave = False
                 lastSave = time.time()
+
+            # Was our queue big enough to keep the generator busy while we trained?
+            if outputQueue.qsize() == 0:
+                if pendingSave:
+                    outputQueueSize *= 1.5
+                    print("Increased outputQueueSize to {}".format(outputQueueSize))
+                else:
+                    outputQueueSaveSize *= 1.15
+                    print("Increased outputSaveQueueSize to {}".format(outputQueueSize))
+            pendingSave = False
 
 
     print("Saving before exit...")
     neuralNet.save( modelFile )
+    print("Model saved. Saving training data")
     saveTrainingData( dataName, trainingInputs, trainingOutputs)
     print("Save complete.")
 
@@ -480,23 +491,21 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
 
     model = Sequential()
 
-    model.add(Dense( 8*inputCnt + 2*outputCnt, input_shape=(inputCnt,), activation='linear', kernel_initializer='random_uniform'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dropout(.2))
-    #model.add(BatchNormalization(momentum=0.8))
-    model.add(Dense(3*inputCnt + 2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dropout(.2))
-    model.add(Dense(3*inputCnt + 2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dropout(.2))
-    model.add(Dense(3*inputCnt + 2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dropout(.2))
-    #model.add(BatchNormalization(momentum=0.8))
-    model.add(Dense(2*outputCnt, activation='linear', kernel_initializer='random_uniform'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dropout(.2))
+    model.add(Dense(12*inputCnt, input_shape=(inputCnt,), kernel_initializer='random_uniform'))
+    model.add(LeakyReLU())
+    model.add(BatchNormalization())
+    model.add(Dropout(.3))
+
+    model.add(Dense(8*inputCnt + 2*outputCnt, kernel_initializer='random_uniform'))
+    model.add(LeakyReLU())
+    model.add(BatchNormalization())
+    model.add(Dropout(.3))
+
+    model.add(Dense(4*inputCnt + 2*outputCnt, kernel_initializer='random_uniform'))
+    model.add(LeakyReLU())
+    model.add(BatchNormalization())
+    model.add(Dropout(.3))
+
     model.add(Dense(outputCnt, activation='linear'))
 
     model.summary()
@@ -505,7 +514,7 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
     predictor = model(input)
     nn = Model( input, predictor )
 
-    optimizer = Adam(0.0002, 0.5)
+    optimizer = Adam(0.0002)
     nn.compile(loss='logcosh',
             optimizer=optimizer,
             metrics=['accuracy'])
