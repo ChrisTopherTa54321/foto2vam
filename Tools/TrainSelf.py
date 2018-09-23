@@ -28,6 +28,7 @@ def main( args ):
         pydevd.settrace(suspend=False)
 
     modelFile = args.outputFile
+    trainingCacheFile = args.trainingDataCache
 
     print("Creating initial encodings...")
     initialEncodings = getEncodingsFromPaths( [args.imagePath], recursive=True, cache=True)
@@ -52,6 +53,7 @@ def main( args ):
     morph2imageQueue = multiprocessing.Queue()
     image2encodingQueue = multiprocessing.Queue(maxsize=encBatchSize)
     encoding2morphQueue = multiprocessing.Queue()
+    vamFaceQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
     encodingDiedEvent = multiprocessing.Event()
 
@@ -60,12 +62,14 @@ def main( args ):
     morphs2image = multiprocessing.Process(target=morphs_to_image_proc, args=( config,  morph2imageQueue, image2encodingQueue, doneEvent, args.pydev ) )
     procs.append(morphs2image)
 
-    # Multiple encoding threads
-    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, doneEvent, encodingDiedEvent, args.pydev ) )
+    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, vamFaceQueue, doneEvent, encodingDiedEvent, args.pydev ) )
     procs.append( image2encoding )
 
     neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, args.pydev ) )
     procs.append(neuralnet)
+
+    trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( vamFaceQueue, trainingCacheFile, doneEvent, args.pydev ))
+    procs.append(trainingDataSaver)
 
     for proc in procs:
         proc.start()
@@ -89,7 +93,7 @@ def main( args ):
             if len(look.morphFloats ) == config.getShape()[1]:
                 morph2imageQueue.put( [0]*config.getShape()[0] + look.morphFloats )
 
-    print("Enable ScrollLock to exit")
+    print("Enable ScrollLock to exit, CapsLock to pause image generation")
     while True:
         if GetKeyState(VK_SCROLL):
             break
@@ -174,6 +178,50 @@ def createEncodings( fileList ):
     return encodedFaces
 
 
+# Previously we've just been saving the training number lists, but
+# if we want to change a parameter we'd have to regenerate all data. This
+# process saves the entire data set
+def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
+    trainingData = []
+
+    if os.path.exists( trainingCacheFile ):
+        inFile = open( trainingCacheFile, "rb")
+        trainingData = pickle.load( inFile )
+        inFile.close()
+        print("Loaded {} entries into training cache".format(len(trainingData)))
+
+    saveInterval = 10000
+    pendingSave = False
+    if pydev:
+        import pydevd
+        pydevd.settrace(suspend=False)
+
+    while not doneEvent.is_set():
+        try:
+            faces = inputQueue.get(block=True, timeout=1)
+            newEntry = {}
+            for face in faces:
+                face._img = None # Don't want to save images
+                newEntry[face.getAngle()] = face
+            trainingData.append( newEntry )
+            if len(trainingData) % saveInterval == 0:
+                pendingSave = True
+        except queue.Empty:
+            if pendingSave:
+                print("Saving {} entries in training cache...".format(len(trainingData)))
+                outFile = open( trainingCacheFile, 'wb' )
+                pickle.dump( trainingData, outFile )
+                outFile.close()
+                print("Done saving training cache")
+                pendingSave = False
+        except Exception as e:
+            print("Error caching faces: {}".format(str(e)))
+    print("Saving {} entries in training cache before exiting...".format(len(trainingData)))
+    outFile = open( trainingCacheFile, 'wb' )
+    pickle.dump( trainingData, outFile )
+    outFile.close()
+    print("Done saving training cache")
+
 
 
 def morphs_to_image_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
@@ -209,7 +257,7 @@ def morphs_to_image_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
             print("Error in morphs_to_image_proc: {}".format(str(e)))
 
 
-def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEvent, encodingDiedEvent, pydev ):
+def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, trainingCacheQueue, doneEvent, encodingDiedEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
@@ -235,6 +283,9 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, doneEven
                             raise Exception("Image failed validation!")
                         params = config.generateParams( data[1] + [os.path.join( data[0], "face.json") ] )
                         params_valid = True
+                        # Cache off the face
+                        trainingCacheQueue.put( data[1] )
+                        # Send it off to the neural net training
                         outputQueue.put( ( params_valid, params ) )
                     except Exception as e:
                         pass
@@ -404,7 +455,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
     outputQueueSaveSize = 1024
     while not doneEvent.is_set():
         try:
-            valid, params = inputQueue.get(block=False, timeout=1)
+            valid, params = inputQueue.get(block=False)
             inputs = params[:inputCnt]
             outputs = params[inputCnt:]
 
@@ -532,6 +583,7 @@ def parseArgs():
     parser.add_argument('--encBatchSize', help="Batch size for generating encodings", default=64)
     #parser.add_argument('--inputGlob', help="Glob for input images", default="D:/real/*.png")
     parser.add_argument('--outputFile', help="File to write output model to", default="output.model")
+    parser.add_argument('--trainingDataCache', help="File to cache raw training data", default="training.cache")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
 
