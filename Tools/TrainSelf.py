@@ -22,6 +22,9 @@ NORMALIZE_SIZE=150
 def main( args ):
     from Utils.Training.config import Config
     print( "Initializing training...")
+    while GetKeyState(VK_SCROLL):
+        print("Please turn off scroll lock")
+        time.sleep(1)
     if args.pydev:
         print("Enabling debugging with pydev")
         import pydevd
