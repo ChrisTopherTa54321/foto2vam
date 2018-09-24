@@ -1,6 +1,9 @@
 # Class to handle faces encoded for recognition
 
-import face_recognition_hst as face_recognition
+try:
+    import face_recognition_hst as face_recognition
+except:
+    import face_recognition
 import numpy
 from PIL import Image, ImageDraw
 import cv2
