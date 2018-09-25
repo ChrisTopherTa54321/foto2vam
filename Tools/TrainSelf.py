@@ -34,9 +34,13 @@ def main( args ):
 
     modelFile = args.outputFile
     trainingCacheFile = args.trainingDataCache
+    onlySeed = args.onlySeedImages
 
     print("Creating initial encodings...")
-    initialEncodings = getEncodingsFromPaths( [args.imagePath], recursive=True, cache=True)
+    if args.seedImagePath is None:
+        initialEncodings = []
+    else:
+        initialEncodings = getEncodingsFromPaths( [args.seedImagePath], recursive=True, cache=True)
 
     config = Config.createFromFile(args.configFile)
     # Try encodings until one succeeds
@@ -70,7 +74,7 @@ def main( args ):
     image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, vamFaceQueue, doneEvent, encodingDiedEvent, args.pydev ) )
     procs.append( image2encoding )
 
-    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, args.pydev ) )
+    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, onlySeed, args.pydev ) )
     procs.append(neuralnet)
 
     trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( vamFaceQueue, trainingCacheFile, doneEvent, args.pydev ))
@@ -98,6 +102,7 @@ def main( args ):
             if len(look.morphFloats ) == config.getShape()[1]:
                 morph2imageQueue.put( [0]*config.getShape()[0] + look.morphFloats )
 
+
     print("Enable ScrollLock to exit, CapsLock to pause image generation")
     while True:
         if GetKeyState(VK_SCROLL):
@@ -117,8 +122,8 @@ def main( args ):
             image2encoding.start()
             procs.append( image2encoding )
 
-
     print("Waiting for processes to exit...")
+    print( "Note: Some python bug prevents them from ever exiting. Once Training Cache, Training Data, and Model are saved just CTRL+BREAK out.")
     # Wait for children to finish
     doneEvent.set()
     for proc in procs:
@@ -284,7 +289,7 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, training
     while not doneEvent.is_set():
         submitWork = False
         try:
-            work = inputQueue.get(block=True, timeout=5)
+            work = inputQueue.get(block=True, timeout=1)
             pathList.append( work )
             submitWork = len(pathList) >= batchSize
         except queue.Empty:
@@ -320,7 +325,6 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, training
                     except:
                         pass
                 pathList.clear()
-
 
 def validatePerson( encodingList ):
     ok = samePerson( encodingList, tolerance=0.6 )
@@ -444,7 +448,7 @@ def mate(targetFace, otherFace, idxList ):
 
 
 
-def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue, outputQueue, doneEvent, pydev ):
+def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue, outputQueue, doneEvent, onlySeed, pydev ):
     # Work around low-memory GPU issue
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     import tensorflow as tf
@@ -464,26 +468,29 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
     trainingOutputs = []
 
     neuralNet = create_neural_net( inputCnt, outputCnt, modelFile )
-    if os.path.exists( dataName ):
+    if os.path.exists( dataName ) and not onlySeed:
         trainingInputs,trainingOutputs = readTrainingData( dataName )
-        print("Read {} training samples".format(len(trainingInputs)))
+    print("Starting with {} training samples".format(len(trainingInputs)))
 
+    lastSeedOnlyInputTime = 0
+    lastSeedOnlyInputCount = 0
     pendingSave = False
     lastSave = time.time()
     outputQueueSize = 256
     outputQueueSaveSize = 1024
     while not doneEvent.is_set():
         try:
-            valid, params = inputQueue.get(block=False)
+            morphsValid, params = inputQueue.get(block=False)
             inputs = params[:inputCnt]
             outputs = params[inputCnt:]
 
             # If valid we can train on it
-            if valid:
+            if morphsValid:
                 trainingInputs.append( inputs )
                 trainingOutputs.append( outputs )
                 if time.time() > lastSave + 120*60 and len(trainingInputs) % 50 == 0:
                     pendingSave = True
+                print("Added training data. Now size is {}".format(len(trainingInputs)))
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
             if len(trainingInputs) > 0 and len(trainingInputs) % 100 == 0:
@@ -496,7 +503,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                         pass
 
             # Don't use predictions until we have trained a bit
-            if len(trainingInputs) > 10000 and valid:
+            if len(trainingInputs) > 10000 or onlySeed:
                 # Now given the encoding, what morphs would we have predicted?
                 predictedOutputs = create_prediction( neuralNet, np.array([inputs]) )
                 predictedParams = inputs + list(predictedOutputs[0])
@@ -508,14 +515,27 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 continue
             reqdSize = outputQueueSaveSize if pendingSave else outputQueueSize
             try:
-                while outputQueue.qsize() < reqdSize:
-                    queueRandomOutputParams(config, trainingOutputs, outputQueue)
+                if not onlySeed:
+                    while outputQueue.qsize() < reqdSize:
+                        queueRandomOutputParams(config, trainingOutputs, outputQueue)
+                elif ( len(trainingInputs) > lastSeedOnlyInputCount ) or ( time.time() > lastSeedOnlyInputTime + 10 ):
+                    lastSeedOnlyInputCount = len(trainingInputs)
+                    lastSeedOnlyInputTime = time.time()
+                    for encoding in initialEncodings:
+                        try:
+                            params = config.generateParams(encoding)
+                            inputQueue.put( ( False, params ) )
+                        except:
+                            pass
+                    
             finally:
                 while True:
                     if len(trainingInputs) > 0:
                         neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=1, verbose=1)
+                        pass
                     if not GetKeyState(VK_CAPITAL):
                         break
+                    print("Caps Lock is enabled. Contiunally training and not feeding image generator")
 
 
             if pendingSave:
@@ -527,7 +547,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 lastSave = time.time()
 
             # Was our queue big enough to keep the generator busy while we trained?
-            if outputQueue.qsize() == 0:
+            if outputQueue.qsize() == 0 and not onlySeed:
                 if pendingSave:
                     outputQueueSize *= 1.5
                     print("Increased outputQueueSize to {}".format(outputQueueSize))
@@ -598,7 +618,8 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
 def parseArgs():
     parser = argparse.ArgumentParser( description="Train GAN" )
     parser.add_argument('--configFile', help="Model configuration file", required=True)
-    parser.add_argument('--imagePath', help="Root path for seed images", required=True)
+    parser.add_argument('--seedImagePath', help="Root path for seed images. Must have at least 1 valid seed imageset", required=True)
+    parser.add_argument('--onlySeedImages', action='store_true', default=False, help="Train *only* on the seed images")
     parser.add_argument('--seedJsonPath', help="Path to JSON looks to seed training with", default=None)
     parser.add_argument('--encBatchSize', help="Batch size for generating encodings", default=64)
     #parser.add_argument('--inputGlob', help="Glob for input images", default="D:/real/*.png")
