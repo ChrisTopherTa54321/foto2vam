@@ -11,6 +11,8 @@ import time
 import pickle
 import random
 import copy
+import msgpack
+import gc
 from win32api import GetKeyState
 from win32con import VK_SCROLL, VK_CAPITAL
 
@@ -188,9 +190,7 @@ def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
     trainingData = []
 
     if os.path.exists( trainingCacheFile ):
-        inFile = open( trainingCacheFile, "rb")
-        trainingData = pickle.load( inFile )
-        inFile.close()
+        trainingData = load_training_cache( trainingCacheFile )
         print("Loaded {} entries into training cache".format(len(trainingData)))
 
     saveInterval = 10000
@@ -212,20 +212,33 @@ def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
         except queue.Empty:
             if pendingSave:
                 print("Saving {} entries in training cache...".format(len(trainingData)))
-                outFile = open( trainingCacheFile, 'wb' )
-                pickle.dump( trainingData, outFile )
-                outFile.close()
+                save_training_cache( trainingData, trainingCacheFile )
                 print("Done saving training cache")
                 pendingSave = False
         except Exception as e:
             print("Error caching faces: {}".format(str(e)))
+
     print("Saving {} entries in training cache before exiting...".format(len(trainingData)))
-    outFile = open( trainingCacheFile, 'wb' )
-    pickle.dump( trainingData, outFile )
-    outFile.close()
+    save_training_cache( trainingData, trainingCacheFile )
     print("Done saving training cache")
 
+def load_training_cache( path ):
+    from Utils.Face.encoded import EncodedFace
+    import gc
+    gc.disable()
 
+    inFile = open( path, "rb")
+    trainingData = msgpack.unpack( inFile, object_hook=EncodedFace.msgpack_decode, use_list=False)
+    inFile.close()
+
+    gc.enable()
+    return trainingData
+
+def save_training_cache( cacheData, path ):
+    from Utils.Face.encoded import EncodedFace
+    outFile = open( path, 'wb' )
+    msgpack.pack( cacheData, outFile, default=EncodedFace.msgpack_encode, use_bin_type=True)
+    outFile.close()
 
 def morphs_to_image_proc( config, inputQueue, outputQueue, doneEvent, pydev ):
     if pydev:
@@ -350,12 +363,15 @@ def saveTrainingData( dataName, trainingInputs, trainingOutputs ):
         raise Exception("Input length mismatch with output length!")
 
     outFile = open( dataName, 'wb' )
-    pickle.dump( ( trainingInputs, trainingOutputs ), outFile )
+    msgpack.pack( ( trainingInputs, trainingOutputs ), outFile, use_bin_type=True )
     outFile.close()
 
 def readTrainingData( dataName ):
     dataFile = open( dataName, "rb" )
-    inputList, outputList = pickle.load( dataFile )
+    gc.disable()
+    inputList,outputList = msgpack.unpack( dataFile )
+    gc.enable()
+    dataFile.close()
     return list(inputList), list(outputList)
 
 
@@ -466,7 +482,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
             if valid:
                 trainingInputs.append( inputs )
                 trainingOutputs.append( outputs )
-                if time.time() > lastSave + 30*60 and len(trainingInputs) % 50 == 0:
+                if time.time() > lastSave + 120*60 and len(trainingInputs) % 50 == 0:
                     pendingSave = True
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
@@ -503,8 +519,9 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
 
 
             if pendingSave:
-                print("Saving...")
+                print("Saving model...")
                 neuralNet.save( modelFile )
+                print("Done saving model, saving training data...")
                 saveTrainingData( dataName, trainingInputs, trainingOutputs)
                 print("Save complete!")
                 lastSave = time.time()

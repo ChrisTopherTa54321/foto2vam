@@ -1,0 +1,11 @@
+pywin32
+pyautogui
+cmake
+dlib>=19.15.99
+git+https://github.com/ChrisTopherTa54321/face_recognition#egg=face_recognition_hst>=1.2.4
+deap
+opencv-python
+imutils
+keras
+tensorflow-gpu
+msgpack

@@ -52,6 +52,23 @@ class EncodedFace:
         if not keepImg:
             self._img = None
 
+    @staticmethod
+    def msgpack_encode(obj):
+        if isinstance(obj, EncodedFace):
+            return {'__EncodedFace__': True, 'angle': obj._angle, 'encodings': obj._encodings, 'landmarks': obj._landmarks }
+        return obj
+    
+    @staticmethod
+    def msgpack_decode(obj):
+        if b'__EncodedFace__' in obj:
+            decodedFace = EncodedFace(None)
+            decodedFace._angle = obj[b'angle']
+            decodedFace._encodings = obj[b'encodings']
+            decodedFace._landmarks = obj[b'landmarks']
+            obj = decodedFace
+        return obj 
+        
+
 
     @staticmethod
     def batchEncode( imageList, batch_size = 128, keepImage = False, debugPose = False ):
