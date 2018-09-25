@@ -57,17 +57,21 @@ class EncodedFace:
         if isinstance(obj, EncodedFace):
             return {'__EncodedFace__': True, 'angle': obj._angle, 'encodings': obj._encodings, 'landmarks': obj._landmarks }
         return obj
-    
+
     @staticmethod
     def msgpack_decode(obj):
-        if b'__EncodedFace__' in obj:
+        if '__EncodedFace__' in obj:
             decodedFace = EncodedFace(None)
-            decodedFace._angle = obj[b'angle']
-            decodedFace._encodings = obj[b'encodings']
-            decodedFace._landmarks = obj[b'landmarks']
+            decodedFace._angle = obj['angle']
+            decodedFace._encodings = obj['encodings']
+
+            # Can't get msgpack to not store embedded dict as byte-array, so decode it
+            decodedFace._landmarks = {}
+            for k,v in obj['landmarks'].items():
+                decodedFace._landmarks[k.decode('utf-8')] = v
             obj = decodedFace
-        return obj 
-        
+        return obj
+
 
 
     @staticmethod

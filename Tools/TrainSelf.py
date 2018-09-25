@@ -36,6 +36,12 @@ def main( args ):
     trainingCacheFile = args.trainingDataCache
     onlySeed = args.onlySeedImages
 
+
+    # If not none, the neural net process will generate from the training cache
+    nnTrainingCache = None
+    if args.useTrainingDataCache:
+        nnTrainingCache = trainingCacheFile
+
     print("Creating initial encodings...")
     if args.seedImagePath is None:
         initialEncodings = []
@@ -74,7 +80,7 @@ def main( args ):
     image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, vamFaceQueue, doneEvent, encodingDiedEvent, args.pydev ) )
     procs.append( image2encoding )
 
-    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, encoding2morphQueue, morph2imageQueue, doneEvent, onlySeed, args.pydev ) )
+    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, nnTrainingCache, encoding2morphQueue, morph2imageQueue, doneEvent, onlySeed, args.pydev ) )
     procs.append(neuralnet)
 
     trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( vamFaceQueue, trainingCacheFile, doneEvent, args.pydev ))
@@ -192,32 +198,30 @@ def createEncodings( fileList ):
 # if we want to change a parameter we'd have to regenerate all data. This
 # process saves the entire data set
 def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
-    trainingData = []
-
-    if os.path.exists( trainingCacheFile ):
-        trainingData = load_training_cache( trainingCacheFile )
-        print("Loaded {} entries into training cache".format(len(trainingData)))
-
-    saveInterval = 10000
-    pendingSave = False
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
 
+    trainingData = []
+
+    saveInterval = 10000
+    pendingSave = False
+
     while not doneEvent.is_set():
         try:
             faces = inputQueue.get(block=True, timeout=1)
-            newEntry = {}
+            newEntry = []
             for face in faces:
                 face._img = None # Don't want to save images
-                newEntry[face.getAngle()] = face
+                newEntry.append(face)
             trainingData.append( newEntry )
             if len(trainingData) % saveInterval == 0:
                 pendingSave = True
         except queue.Empty:
             if pendingSave:
-                print("Saving {} entries in training cache...".format(len(trainingData)))
+                print("Appending {} entries to training cache...".format(len(trainingData)))
                 save_training_cache( trainingData, trainingCacheFile )
+                trainingData.clear()
                 print("Done saving training cache")
                 pendingSave = False
         except Exception as e:
@@ -225,6 +229,7 @@ def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
 
     print("Saving {} entries in training cache before exiting...".format(len(trainingData)))
     save_training_cache( trainingData, trainingCacheFile )
+    trainingData.clear()
     print("Done saving training cache")
 
 def load_training_cache( path ):
@@ -233,7 +238,7 @@ def load_training_cache( path ):
     gc.disable()
 
     inFile = open( path, "rb")
-    trainingData = msgpack.unpack( inFile, object_hook=EncodedFace.msgpack_decode, use_list=False)
+    trainingData = msgpack.unpack( inFile, object_hook=EncodedFace.msgpack_decode, use_list=False, encoding='utf-8')
     inFile.close()
 
     gc.enable()
@@ -241,7 +246,7 @@ def load_training_cache( path ):
 
 def save_training_cache( cacheData, path ):
     from Utils.Face.encoded import EncodedFace
-    outFile = open( path, 'wb' )
+    outFile = open( path, 'ab' )
     msgpack.pack( cacheData, outFile, default=EncodedFace.msgpack_encode, use_bin_type=True)
     outFile.close()
 
@@ -366,7 +371,7 @@ def saveTrainingData( dataName, trainingInputs, trainingOutputs ):
     if len(trainingInputs) != len(trainingOutputs):
         raise Exception("Input length mismatch with output length!")
 
-    outFile = open( dataName, 'wb' )
+    outFile = open( dataName, 'ab' )
     msgpack.pack( ( trainingInputs, trainingOutputs ), outFile, use_bin_type=True )
     outFile.close()
 
@@ -448,7 +453,7 @@ def mate(targetFace, otherFace, idxList ):
 
 
 
-def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue, outputQueue, doneEvent, onlySeed, pydev ):
+def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGenerateFrom, inputQueue, outputQueue, doneEvent, onlySeed, pydev ):
     # Work around low-memory GPU issue
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     import tensorflow as tf
@@ -470,6 +475,19 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
     neuralNet = create_neural_net( inputCnt, outputCnt, modelFile )
     if os.path.exists( dataName ) and not onlySeed:
         trainingInputs,trainingOutputs = readTrainingData( dataName )
+
+    lastSaveIdx = len(trainingInputs)
+
+    if cacheToGenerateFrom is not None:
+        print("Currently have {} samples, now generating from training cache...".format(len(trainingInputs)))
+        cache = load_training_cache( cacheToGenerateFrom )
+        for item in cache:
+            try:
+                newSample = config.generateParams(item)
+                trainingInputs.append(newSample)
+            except Exception as e:
+                pass
+
     print("Starting with {} training samples".format(len(trainingInputs)))
 
     lastSeedOnlyInputTime = 0
@@ -527,7 +545,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                             inputQueue.put( ( False, params ) )
                         except:
                             pass
-                    
+
             finally:
                 while True:
                     if len(trainingInputs) > 0:
@@ -542,7 +560,8 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
                 print("Saving model...")
                 neuralNet.save( modelFile )
                 print("Done saving model, saving training data...")
-                saveTrainingData( dataName, trainingInputs, trainingOutputs)
+                saveTrainingData( dataName, trainingInputs[lastSaveIdx:], trainingOutputs[lastSaveIdx:])
+                lastSaveIdx = len(trainingInputs)
                 print("Save complete!")
                 lastSave = time.time()
 
@@ -560,7 +579,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, inputQueue,
     print("Saving before exit...")
     neuralNet.save( modelFile )
     print("Model saved. Saving training data")
-    saveTrainingData( dataName, trainingInputs, trainingOutputs)
+    saveTrainingData( dataName, trainingInputs[lastSaveIdx:], trainingOutputs[lastSaveIdx:])
     print("Save complete.")
 
 def create_prediction( nn, input ):
@@ -625,6 +644,7 @@ def parseArgs():
     #parser.add_argument('--inputGlob', help="Glob for input images", default="D:/real/*.png")
     parser.add_argument('--outputFile', help="File to write output model to", default="output.model")
     parser.add_argument('--trainingDataCache', help="File to cache raw training data", default="training.cache")
+    parser.add_argument('--useTrainingDataCache', default=False, action='store_true', help="Generates training data from the cache and adds it to training data. Useful on first run with new config")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
 
 
