@@ -232,7 +232,7 @@ def load_training_cache( path ):
     inFile.close()
 
     gc.enable()
-    return trainingData
+    return list(trainingData)
 
 def save_training_cache( cacheData, path ):
     from Utils.Face.encoded import EncodedFace
