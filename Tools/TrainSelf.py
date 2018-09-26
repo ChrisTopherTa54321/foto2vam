@@ -12,6 +12,7 @@ import random
 import copy
 import msgpack
 import gc
+import tqdm
 from win32api import GetKeyState
 from win32con import VK_SCROLL, VK_CAPITAL
 
@@ -71,20 +72,29 @@ def main( args ):
     vamFaceQueue = multiprocessing.Queue()
     doneEvent = multiprocessing.Event()
     encodingDiedEvent = multiprocessing.Event()
+    safeToExitEvents = []
 
     # Set up worker processes
     procs = []
-    morphs2image = multiprocessing.Process(target=morphs_to_image_proc, args=( config,  morph2imageQueue, image2encodingQueue, tmpDir, doneEvent, args.pydev ) )
+    safeToExitEvent = multiprocessing.Event()
+    morphs2image = multiprocessing.Process(target=morphs_to_image_proc, args=( config,  morph2imageQueue, image2encodingQueue, tmpDir, doneEvent, safeToExitEvent, args.pydev ) )
     procs.append(morphs2image)
+    safeToExitEvents.append( safeToExitEvent )
 
-    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, vamFaceQueue, doneEvent, encodingDiedEvent, args.pydev ) )
+    safeToExitEvent = multiprocessing.Event()
+    image2encoding = multiprocessing.Process(target=image_to_encoding_proc, args=( config, encBatchSize, image2encodingQueue, encoding2morphQueue, vamFaceQueue, doneEvent, encodingDiedEvent, safeToExitEvent, args.pydev ) )
     procs.append( image2encoding )
+    safeToExitEvents.append( safeToExitEvent )
 
-    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, nnTrainingCache, encoding2morphQueue, morph2imageQueue, doneEvent, onlySeed, args.pydev ) )
+    safeToExitEvent = multiprocessing.Event()
+    neuralnet = multiprocessing.Process(target=neural_net_proc, args=( config, modelFile, trainBatchSize, initialEncodings, nnTrainingCache, encoding2morphQueue, morph2imageQueue, doneEvent, safeToExitEvent, onlySeed, args.pydev ) )
     procs.append(neuralnet)
+    safeToExitEvents.append( safeToExitEvent )
 
-    trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( vamFaceQueue, trainingCacheFile, doneEvent, args.pydev ))
+    safeToExitEvent = multiprocessing.Event()
+    trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( vamFaceQueue, trainingCacheFile, doneEvent, safeToExitEvent, args.pydev ))
     procs.append(trainingDataSaver)
+    safeToExitEvents.append( safeToExitEvent )
 
     for proc in procs:
         proc.start()
@@ -129,12 +139,16 @@ def main( args ):
             procs.append( image2encoding )
 
     print("Waiting for processes to exit...")
-    print( "Note: Some python bug prevents them from ever exiting. Once Training Cache, Training Data, and Model are saved just CTRL+BREAK out.")
     # Wait for children to finish
     doneEvent.set()
-    for proc in procs:
-        proc.join()
 
+#     for proc in procs:
+#         proc.join()
+    # Join isn't working right
+    for exitEvent in safeToExitEvents:
+        exitEvent.wait()
+
+    print("Exit successful. If you're still stuck here, I don't know why. Just kill me.")
 
 def getLooksFromPath( seedJsonPath, recursive = True ):
     from Utils.Face.vam import VamFace
@@ -197,7 +211,7 @@ def createEncodings( fileList ):
 # Previously we've just been saving the training number lists, but
 # if we want to change a parameter we'd have to regenerate all data. This
 # process saves the entire data set
-def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
+def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, exitEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
@@ -234,6 +248,7 @@ def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, pydev ):
     print("Saving {} entries in training cache before exiting...".format(len(trainingData)))
     save_training_cache( trainingData, trainingCacheFile )
     print("Done saving training cache")
+    exitEvent.set()
 
 def load_training_cache( path ):
     from Utils.Face.encoded import EncodedFace
@@ -256,7 +271,7 @@ def save_training_cache( cacheData, path ):
     msgpack.pack( cacheData, outFile, default=EncodedFace.msgpack_encode, use_bin_type=True)
     outFile.close()
 
-def morphs_to_image_proc( config, inputQueue, outputQueue, tmpDir, doneEvent, pydev ):
+def morphs_to_image_proc( config, inputQueue, outputQueue, tmpDir, doneEvent, exitEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
@@ -288,8 +303,10 @@ def morphs_to_image_proc( config, inputQueue, outputQueue, tmpDir, doneEvent, py
         except Exception as e:
             print("Error in morphs_to_image_proc: {}".format(str(e)))
 
+    exitEvent.set()
 
-def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, trainingCacheQueue, doneEvent, encodingDiedEvent, pydev ):
+
+def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, trainingCacheQueue, doneEvent, encodingDiedEvent, exitEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
@@ -336,6 +353,8 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, training
                     except:
                         pass
                 pathList.clear()
+
+    exitEvent.set()
 
 def validatePerson( encodingList ):
     ok = samePerson( encodingList, tolerance=0.6 )
@@ -459,7 +478,7 @@ def mate(targetFace, otherFace, idxList ):
 
 
 
-def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGenerateFrom, inputQueue, outputQueue, doneEvent, onlySeed, pydev ):
+def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGenerateFrom, inputQueue, outputQueue, doneEvent, exitEvent, onlySeed, pydev ):
     # Work around low-memory GPU issue
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     import tensorflow as tf
@@ -489,15 +508,23 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
         print("Currently have {} samples, now generating from training cache...".format(len(trainingInputs)))
         cache = load_training_cache( cacheToGenerateFrom )
         pendingSave = True
-        for idx,item in enumerate(cache):
-            try:
-                newSample = config.generateParams(item)
-                trainingInputs.append(newSample[:inputCnt])
-                trainingOutputs.append(newSample[inputCnt:])
-                if idx%500 == 0:
-                    print("Generating training data from cache {}/{}  [{}%]".format(idx,len(cache),round(100*(idx/len(cache)),2)))
-            except Exception as e:
-                pass
+        pool = multiprocessing.Pool(multiprocessing.cpu_count())
+        for res in tqdm.tqdm(pool.imap_unordered( config.generateParams, cache ), total=len(cache) ):
+            trainingInputs.append( res[:inputCnt] )
+            trainingOutputs.append( res[inputCnt:] )
+        pool.close()
+
+#         start = time.time()
+#         for idx,item in enumerate(cache):
+#             try:
+#                 newSample = config.generateParams(item)
+#                 trainingInputs.append(newSample[:inputCnt])
+#                 trainingOutputs.append(newSample[inputCnt:])
+#                 if idx%500 == 0:
+#                     print("Generating training data from cache {}/{}  [{}%]".format(idx,len(cache),round(100*(idx/len(cache)),2)))
+#             except Exception as e:
+#                 pass
+#         print("Took {}s to generate from cache using 1 process".format( time.time() - start))
 
     print("Starting with {} training samples".format(len(trainingInputs)))
 
@@ -506,6 +533,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
     lastSave = time.time()
     outputQueueSize = 256
     outputQueueSaveSize = 1024
+    lastReEnqueueCnt = 0
     while not doneEvent.is_set():
         try:
             morphsValid, params = inputQueue.get(block=False)
@@ -520,7 +548,8 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
                     pendingSave = True
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
-            if len(trainingInputs) > 0 and len(trainingInputs) % 100 == 0:
+            if len(trainingInputs) != lastReEnqueueCnt and len(trainingInputs) % 100 == 0:
+                lastReEnqueueCnt = len(trainingInputs)
                # Periodically re-enqueue the initial encodings
                 for encoding in initialEncodings:
                     try:
@@ -530,11 +559,14 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
                         pass
 
             # Don't use predictions until we have trained a bit
-            if len(trainingInputs) > 10000 or onlySeed:
+            if ( len(trainingInputs) > 10000 ) or onlySeed:
                 # Now given the encoding, what morphs would we have predicted?
                 predictedOutputs = create_prediction( neuralNet, np.array([inputs]) )
                 predictedParams = inputs + list(predictedOutputs[0])
                 outputQueue.put( predictedParams )
+                # Queue a random look for every predicted look. Sometimes we get stuck with
+                # only predicted looks filling the queue, and it causes a downward spiral
+                queueRandomOutputParams(config, trainingOutputs, outputQueue)
 
         except queue.Empty as e:
             # Been having issue with Queue Empty falsely triggering...
@@ -557,7 +589,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
 
             finally:
                 while True:
-                    if len(trainingInputs) > 0:
+                    if len(trainingInputs) > 5000 or ( onlySeed and len(trainingInputs) > 0 ):
                         neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=1, verbose=1)
                         pass
                     if not GetKeyState(VK_CAPITAL):
@@ -590,6 +622,7 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
     print("Model saved. Saving training data")
     saveTrainingData( dataName, trainingInputs, trainingOutputs)
     print("Save complete.")
+    exitEvent.set()
 
 def create_prediction( nn, input ):
     prediction = nn.predict(input)
@@ -610,17 +643,22 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
 
     model = Sequential()
 
-    model.add(Dense(12*inputCnt, input_shape=(inputCnt,), kernel_initializer='random_uniform'))
+    model.add(Dense(7*inputCnt, input_shape=(inputCnt,), kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
     model.add(BatchNormalization())
     model.add(Dropout(.3))
 
-    model.add(Dense(8*inputCnt + 2*outputCnt, kernel_initializer='random_uniform'))
+    model.add(Dense(7*inputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
     model.add(BatchNormalization())
     model.add(Dropout(.3))
 
-    model.add(Dense(4*inputCnt + 2*outputCnt, kernel_initializer='random_uniform'))
+    model.add(Dense(7*inputCnt, kernel_initializer='random_uniform'))
+    model.add(LeakyReLU())
+    model.add(BatchNormalization())
+    model.add(Dropout(.3))
+
+    model.add(Dense(7*inputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
     model.add(BatchNormalization())
     model.add(Dropout(.3))

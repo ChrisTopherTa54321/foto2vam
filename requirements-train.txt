@@ -9,3 +9,4 @@ imutils
 keras
 tensorflow-gpu
 msgpack
+tqdm
