@@ -287,6 +287,8 @@ def morphs_to_image_proc( config, inputQueue, outputQueue, tmpDir, doneEvent, ex
 
     while not doneEvent.is_set():
         try:
+            while GetKeyState(VK_CAPITAL):
+                time.sleep(1)
             params = inputQueue.get(block=True, timeout=1)
             morphs = params[inputCnt:]
             vamFace.importFloatList(morphs)
