@@ -496,6 +496,10 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
     inputCnt = config.getShape()[0]
     outputCnt = config.getShape()[1]
 
+    validationInputs = []
+    validationOutputs = []
+    validationPercent = .05
+
     trainingInputs = []
     trainingOutputs = []
 
@@ -516,18 +520,6 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
             trainingOutputs.append( res[inputCnt:] )
         pool.close()
 
-#         start = time.time()
-#         for idx,item in enumerate(cache):
-#             try:
-#                 newSample = config.generateParams(item)
-#                 trainingInputs.append(newSample[:inputCnt])
-#                 trainingOutputs.append(newSample[inputCnt:])
-#                 if idx%500 == 0:
-#                     print("Generating training data from cache {}/{}  [{}%]".format(idx,len(cache),round(100*(idx/len(cache)),2)))
-#             except Exception as e:
-#                 pass
-#         print("Took {}s to generate from cache using 1 process".format( time.time() - start))
-
     print("Starting with {} training samples".format(len(trainingInputs)))
 
     lastSeedOnlyInputTime = 0
@@ -544,10 +536,14 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
 
             # If valid we can train on it
             if morphsValid:
-                trainingInputs.append( inputs )
-                trainingOutputs.append( outputs )
-                if time.time() > lastSave + 120*60 and len(trainingInputs) % 50 == 0:
-                    pendingSave = True
+                if random.random() < .25 and len(validationInputs) < validationPercent*len(trainingInputs):
+                    validationInputs.append( inputs )
+                    validationOutputs.append( outputs )
+                else:
+                    trainingInputs.append( inputs )
+                    trainingOutputs.append( outputs )
+                    if time.time() > lastSave + 120*60 and len(trainingInputs) % 50 == 0:
+                        pendingSave = True
                 #print( "{} valid faces".format( len(trainingInputs) ) )
 
             if len(trainingInputs) != lastReEnqueueCnt and len(trainingInputs) % 100 == 0:
@@ -593,6 +589,8 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
                 while True:
                     if len(trainingInputs) > 5000 or ( onlySeed and len(trainingInputs) > 0 ):
                         neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=1, verbose=1)
+                        loss = neuralNet.validate( x=np.array(validationInputs), y=np.array(validationOutputs), batch_size=batchSize, verbose=1)
+                        print(loss)
                         pass
                     if not GetKeyState(VK_CAPITAL):
                         break
@@ -647,23 +645,19 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
 
     model.add(Dense(7*inputCnt, input_shape=(inputCnt,), kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
-    model.add(BatchNormalization())
-    model.add(Dropout(.3))
+    model.add(Dropout(.5))
 
     model.add(Dense(7*inputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
-    model.add(BatchNormalization())
-    model.add(Dropout(.3))
+    model.add(Dropout(.5))
 
     model.add(Dense(7*inputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
-    model.add(BatchNormalization())
-    model.add(Dropout(.3))
+    model.add(Dropout(.5))
 
     model.add(Dense(7*inputCnt, kernel_initializer='random_uniform'))
     model.add(LeakyReLU())
-    model.add(BatchNormalization())
-    model.add(Dropout(.3))
+    model.add(Dropout(.5))
 
     model.add(Dense(outputCnt, activation='linear'))
 
@@ -673,7 +667,7 @@ def create_neural_net( inputCnt, outputCnt, modelPath ):
     predictor = model(input)
     nn = Model( input, predictor )
 
-    optimizer = Adam(0.0002)
+    optimizer = Adam( lr=0.0001 )
     nn.compile(loss='logcosh',
             optimizer=optimizer,
             metrics=['accuracy'])
