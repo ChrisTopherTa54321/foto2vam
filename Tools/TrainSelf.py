@@ -92,7 +92,7 @@ def main( args ):
     safeToExitEvents.append( safeToExitEvent )
 
     safeToExitEvent = multiprocessing.Event()
-    trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( vamFaceQueue, trainingCacheFile, doneEvent, safeToExitEvent, args.pydev ))
+    trainingDataSaver = multiprocessing.Process( target=save_training_data_proc, args=( config, vamFaceQueue, trainingCacheFile, doneEvent, safeToExitEvent, args.pydev ))
     procs.append(trainingDataSaver)
     safeToExitEvents.append( safeToExitEvent )
 
@@ -211,7 +211,7 @@ def createEncodings( fileList ):
 # Previously we've just been saving the training number lists, but
 # if we want to change a parameter we'd have to regenerate all data. This
 # process saves the entire data set
-def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, exitEvent, pydev ):
+def save_training_data_proc( config, inputQueue, trainingCacheFile, doneEvent, exitEvent, pydev ):
     if pydev:
         import pydevd
         pydevd.settrace(suspend=False)
@@ -219,27 +219,25 @@ def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, exitEvent
     trainingData = []
 
     if os.path.exists( trainingCacheFile ):
-        trainingData = load_training_cache( trainingCacheFile )
-        print("Loaded {} entries into training cache".format(len(trainingData)))
-
+        trainingData = load_training_cache( config, trainingCacheFile )
+        print("Initial training cache entries: {}".format(len(trainingData)))
 
     saveInterval = 10000
     pendingSave = False
 
     while not doneEvent.is_set():
         try:
-            faces = inputQueue.get(block=True, timeout=1)
-            newEntry = []
+            ( faces, morphs ) = inputQueue.get(block=True, timeout=1)
             for face in faces:
                 face._img = None # Don't want to save images
-                newEntry.append(face)
-            trainingData.append( newEntry )
+
+            trainingData.append( ( faces, morphs ) )
             if len(trainingData) % saveInterval == 0:
                 pendingSave = True
         except queue.Empty:
             if pendingSave:
-                print("Appending {} entries to training cache...".format(len(trainingData)))
-                save_training_cache( trainingData, trainingCacheFile )
+                print("Saving {} entries to training cache...".format(len(trainingData)))
+                save_training_cache( config, trainingData, trainingCacheFile )
                 print("Done saving training cache")
                 pendingSave = False
         except Exception as e:
@@ -250,25 +248,60 @@ def save_training_data_proc( inputQueue, trainingCacheFile, doneEvent, exitEvent
     print("Done saving training cache")
     exitEvent.set()
 
-def load_training_cache( path ):
+
+def decode_training_data( obj ):
     from Utils.Face.encoded import EncodedFace
+    from Utils.Face.vam import VamFace
+
+    decoders = [ VamFace.msgpack_decode, EncodedFace.msgpack_decode ]
+    for decoder in decoders:
+        newObj = decoder(obj)
+        if newObj != obj:
+            obj = newObj
+            break
+    return obj
+
+def encode_training_data( obj ):
+    from Utils.Face.encoded import EncodedFace
+    from Utils.Face.vam import VamFace
+
+    encoders = [ VamFace.msgpack_encode, EncodedFace.msgpack_encode ]
+    for encoder in encoders:
+        newObj = encoder(obj)
+        if newObj != obj:
+            obj = newObj
+            break
+    return obj
+
+def load_training_cache( config, path ):
     import gc
     gc.disable()
 
     inFile = open( path, "rb")
-    trainingData = msgpack.unpack( inFile, object_hook=EncodedFace.msgpack_decode, use_list=False, encoding='utf-8')
+    unpacker = msgpack.Unpacker( inFile, object_hook=decode_training_data, use_list=False, encoding='utf-8' )
+    baseFace = unpacker.unpack()
+
+    #Check if the config face matches this cache
+    origMorphCnt = len(baseFace.morphs)
+    baseFace.matchMorphs( config.getBaseFace() )
+    newMorphCnt = len(baseFace.morphs)
+
+    if newMorphCnt != origMorphCnt:
+        raise Exception("Configuration morphs don't match cache morphs!")
+    trainingData = unpacker.unpack()
     inFile.close()
 
     gc.enable()
     return list(trainingData)
 
-def save_training_cache( cacheData, path ):
+def save_training_cache( config, cacheData, path ):
     if len(cacheData) == 0:
         return
 
-    from Utils.Face.encoded import EncodedFace
     outFile = open( path, 'wb' )
-    msgpack.pack( cacheData, outFile, default=EncodedFace.msgpack_encode, use_bin_type=True)
+    outFile.write( msgpack.packb( config.getBaseFace(), default=encode_training_data, use_bin_type=True) )
+    for item in cacheData:
+        outFile.write( msgpack.packb( cacheData, default=encode_training_data, use_bin_type=True) )
     outFile.close()
 
 def morphs_to_image_proc( config, inputQueue, outputQueue, tmpDir, doneEvent, exitEvent, pydev ):
@@ -335,7 +368,7 @@ def image_to_encoding_proc( config, batchSize, inputQueue, outputQueue, training
                         params = config.generateParams( data[1] + [os.path.join( data[0], "face.json") ] )
                         params_valid = True
                         # Cache off the face
-                        trainingCacheQueue.put( data[1] )
+                        trainingCacheQueue.put( ( data[1], params[inputCnt:] ) )
                         # Send it off to the neural net training
                         outputQueue.put( ( params_valid, params ) )
                     except Exception as e:
@@ -478,7 +511,11 @@ def mate(targetFace, otherFace, idxList ):
         matedValue = ( ( weightA * targetFace.morphFloats[idx] ) + ( weightB * otherFace.morphFloats[idx] ) ) / ( weightA + weightB )
         targetFace.morphFloats[idx] = matedValue
 
-
+def load_cache_param_gen_helper( config, item ):
+    faces,morphs = item
+    inputCnt = config.getShape()[0]
+    params = config.generateParams(faces)
+    return params[:inputCnt] + list(morphs)
 
 def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGenerateFrom, inputQueue, outputQueue, doneEvent, exitEvent, onlySeed, pydev ):
     # Work around low-memory GPU issue
@@ -511,11 +548,16 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
     pendingSave = False
 
     if cacheToGenerateFrom is not None:
+        from functools import partial
+
         print("Currently have {} samples, now generating from training cache...".format(len(trainingInputs)))
-        cache = load_training_cache( cacheToGenerateFrom )
+        cache = load_training_cache( config, cacheToGenerateFrom )
         pendingSave = True
+
+        # Multi-process loading the cache
+        poolFunc = partial( load_cache_param_gen_helper, config )
         pool = multiprocessing.Pool(multiprocessing.cpu_count())
-        for res in tqdm.tqdm(pool.imap_unordered( config.generateParams, cache ), total=len(cache) ):
+        for res in tqdm.tqdm(pool.imap_unordered( poolFunc, cache ), total=len(cache) ):
             trainingInputs.append( res[:inputCnt] )
             trainingOutputs.append( res[inputCnt:] )
         pool.close()

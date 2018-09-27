@@ -24,6 +24,10 @@ class VamFace:
         # valid ranges for each morph value
         self.morphInfo = []
 
+        # Abort out if not loading a file. Leaves face partially initialized
+        if baseFileName is None:
+            return
+
         self.load( baseFileName, discardExtra = discardExtra )
 
         self.minFace = VamFace( minFileName ) if not minFileName is None else None
@@ -51,6 +55,25 @@ class VamFace:
                 defaultVal = float(morph['value'])
             self.morphFloats.append( defaultVal )
             self.morphInfo.append( { 'min': minVal, 'max': maxVal, 'name': morph['name'] } )
+
+    # Note: msgpack really only is good for verifying a cache uses the same face, not for really saving off faces
+    @staticmethod
+    def msgpack_encode(obj):
+        if isinstance(obj, VamFace):
+            return {'__VamFace__': True, 'morphs': obj.morphs, 'minFace': obj.minFace, 'maxFace': obj.maxFace }
+        return obj
+
+    @staticmethod
+    def msgpack_decode(obj):
+        if '__VamFace__' in obj:
+            decodedFace = VamFace(None)
+            decodedFace.morphs = obj['morphs']
+            decodedFace.minFace = obj['minFace']
+            decodedFace.maxFace = obj['maxFace']
+            decodedFace._createMorphFloats()
+            obj = decodedFace
+        return obj
+
 
 
     @staticmethod
@@ -149,8 +172,9 @@ class VamFace:
                     morph['value'] = 0
             newMorphs.append(morph)
 
-        geometry = VamFace.getStorable( self._storables, "geometry", create=True )
-        geometry['morphs'] = newMorphs
+        if self._storables is not None:
+            geometry = VamFace.getStorable( self._storables, "geometry", create=True )
+            geometry['morphs'] = newMorphs
         self.morphs = newMorphs
         self._createMorphFloats()
 
