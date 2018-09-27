@@ -244,7 +244,7 @@ def save_training_data_proc( config, inputQueue, trainingCacheFile, doneEvent, e
             print("Error caching faces: {}".format(str(e)))
 
     print("Saving {} entries in training cache before exiting...".format(len(trainingData)))
-    save_training_cache( trainingData, trainingCacheFile )
+    save_training_cache( config, trainingData, trainingCacheFile )
     print("Done saving training cache")
     exitEvent.set()
 
@@ -275,10 +275,9 @@ def encode_training_data( obj ):
 
 def load_training_cache( config, path ):
     import gc
-    gc.disable()
 
     inFile = open( path, "rb")
-    unpacker = msgpack.Unpacker( inFile, object_hook=decode_training_data, use_list=False, encoding='utf-8' )
+    unpacker = msgpack.Unpacker( inFile, object_hook=decode_training_data, use_list=True, encoding='utf-8' )
     baseFace = unpacker.unpack()
 
     #Check if the config face matches this cache
@@ -288,11 +287,15 @@ def load_training_cache( config, path ):
 
     if newMorphCnt != origMorphCnt:
         raise Exception("Configuration morphs don't match cache morphs!")
-    trainingData = unpacker.unpack()
+
+    trainingData = []
+    gc.disable()
+    for item in unpacker:
+        trainingData.append(item)
     inFile.close()
 
     gc.enable()
-    return list(trainingData)
+    return trainingData
 
 def save_training_cache( config, cacheData, path ):
     if len(cacheData) == 0:
@@ -301,7 +304,7 @@ def save_training_cache( config, cacheData, path ):
     outFile = open( path, 'wb' )
     outFile.write( msgpack.packb( config.getBaseFace(), default=encode_training_data, use_bin_type=True) )
     for item in cacheData:
-        outFile.write( msgpack.packb( cacheData, default=encode_training_data, use_bin_type=True) )
+        outFile.write( msgpack.packb( item, default=encode_training_data, use_bin_type=True) )
     outFile.close()
 
 def morphs_to_image_proc( config, inputQueue, outputQueue, tmpDir, doneEvent, exitEvent, pydev ):
@@ -631,12 +634,16 @@ def neural_net_proc( config, modelFile, batchSize, initialEncodings, cacheToGene
                 while True:
                     if len(trainingInputs) > 5000 or ( onlySeed and len(trainingInputs) > 0 ):
                         neuralNet.fit( x=np.array(trainingInputs), y=np.array(trainingOutputs), batch_size=batchSize, epochs=1, verbose=1)
-                        loss = neuralNet.validate( x=np.array(validationInputs), y=np.array(validationOutputs), batch_size=batchSize, verbose=1)
-                        print(loss)
-                        pass
+                        if len(validationInputs) > 0:
+                            metrics = neuralNet.evaluate( x=np.array(validationInputs), y=np.array(validationOutputs), batch_size=batchSize, verbose=1)
+                            print( "Trained over {} samples, validated over {} samples. ".format(len(trainingInputs), len(validationInputs)), end='\t')
+                            for metric,val in zip(neuralNet.metrics_names, metrics):
+                                print("( {} : {} )".format(metric,val), end='\t')
+                        print("")
                     if not GetKeyState(VK_CAPITAL):
                         break
-                    print("Caps Lock is enabled. Contiunally training and not feeding image generator")
+                    pendingSave = True
+                    print("Caps Lock is enabled. Continually training and not feeding image generator")
 
 
             if pendingSave:
