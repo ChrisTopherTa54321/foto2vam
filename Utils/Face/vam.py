@@ -203,6 +203,12 @@ class VamFace:
             self.morphs = geometry['morphs']
 
             if discardExtra:
+                # Check for male
+                geometry = VamFace.getStorable( self._storables, "geometry")
+                skin = "Female 1"
+                if "character" in geometry and "Male" in geometry["character"]:
+                    skin = "Male 1"
+
                 # Throw away everything from storables
                 self._storables = []
                 atoms["storables"] = self._storables
@@ -210,7 +216,7 @@ class VamFace:
                 VamFace.setStorable( self._storables, "geometry", "morphs", self.morphs, create=True)
                 VamFace.setStorable( self._storables, "geometry", "hair", "No Hair", create=True)
                 VamFace.setStorable( self._storables, "geometry", "clothing", [], create=True)
-                VamFace.setStorable( self._storables, "geometry", "character", "Female 1", create=True)
+                VamFace.setStorable( self._storables, "geometry", "character", skin, create=True)
                 VamFace.setStorable( self._storables, "rescaleObject", "scale", 1.0 )
                 VamFace.setStorable( self._storables, "JawControl", "targetRotationX", 0 )
                 VamFace.setStorable( self._storables, "EyelidControl", "blinkEnabled", "false", create=True )
