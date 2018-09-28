@@ -6,6 +6,7 @@ import Tools.CreateTrainingEncodings as encodings
 import Tools.MakePrediction as predictor
 import Tools.MergeJson as mergeJson
 import json
+import multiprocessing
 
 ###############################
 # Run the program
@@ -53,7 +54,7 @@ def parseArgs():
     parser = argparse.ArgumentParser( description="Generate training data" )
     parser.add_argument('--inputPath', help="Directory containing images", default="Input")
     parser.add_argument('--modelPath', help="Path to model, can include wildcard", default=os.path.join("models", "*.model") )
-    parser.add_argument('--defaultJson', help="JSON file to copy base look from", default=os.path.join("Sample", "default.json") )
+    parser.add_argument('--defaultJson', help="JSON file to copy base look from", default=os.path.join("mergeBase.json") )
     parser.add_argument('--outputPath', help="Directory to store output", default="Output")
     parser.add_argument('--mergedOutputPath', help="Path to store output merged with defaultJson", default="Output_Merged")
     parser.add_argument("--pydev", action='store_true', default=False, help="Enable pydevd debugging")
@@ -65,5 +66,6 @@ def parseArgs():
 # program entry point
 #
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     args = parseArgs()
     main( args )
