@@ -148,7 +148,7 @@ def main( args ):
     for exitEvent in safeToExitEvents:
         exitEvent.wait()
 
-    print("Exit successful. If you're still stuck here, I don't know why. Just kill me.")
+    print("Exit successful. If you're still stuck here, I don't know why. Just kill me with CTRL+C or CTRL+BREAK.")
 
 def getLooksFromPath( seedJsonPath, recursive = True ):
     from Utils.Face.vam import VamFace

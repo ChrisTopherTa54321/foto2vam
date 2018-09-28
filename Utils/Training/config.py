@@ -1,17 +1,17 @@
-# Class to handle formatting data into csv parameters
+# Class to handle configurations
 
 import json
-import csv
+import os
 from Utils.Face.vam import VamFace
 from Utils.Training.param_generator import ParamGenerator
 
 class Config:
     CONFIG_VERSION = 1
 
-    def __init__(self, configJson ):
-        minJson = configJson["minJson"] if "minJson" in configJson else None
-        maxJson = configJson["maxJson"] if "maxJson" in configJson else None
-        self._baseFace = VamFace( configJson["baseJson"], minJson, maxJson )
+    def __init__(self, configJson, basePath = "" ):
+        minJson = os.path.join(basePath, configJson["minJson"]) if "minJson" in configJson else None
+        maxJson = os.path.join(basePath, configJson["maxJson"]) if "maxJson" in configJson else None
+        self._baseFace = VamFace( os.path.join(basePath, configJson["baseJson"]), minJson, maxJson )
         self._baseFace.trimToAnimatable()
 
         self._paramShape = None
@@ -59,7 +59,7 @@ class Config:
         if "config_version" in jsonData and jsonData["config_version"] is not Config.CONFIG_VERSION:
             raise Exception("Config version mismatch! File was {}, reader was {}".format(jsonData["config_version"], Config.CONFIG_VERSION ) )
 
-        return Config( jsonData )
+        return Config( jsonData, os.path.dirname(fileName) )
 
     def getBaseFace(self):
         return self._baseFace

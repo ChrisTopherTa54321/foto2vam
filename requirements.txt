@@ -1,10 +1,10 @@
 pywin32
 pyautogui
 cmake
-dlib>=19.15.99
+dlib
 face_recognition
 deap
 opencv-python
 imutils
-keras
 tensorflow
+keras
