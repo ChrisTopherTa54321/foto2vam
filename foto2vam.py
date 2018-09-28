@@ -39,7 +39,7 @@ def main( args ):
         print( "Running MergeJson tool" )
         jsonData = json.loads( open(jsonPath).read() )
         # Run MergeTool using the inverted baseJson (copy all attributes except the ones trained on)
-        templateJson = jsonData["baseJson"]
+        templateJson = os.path.join(os.path.dirname(jsonPath), jsonData["baseJson"])
     
         params = None
         params = argparse.Namespace(templateJson=templateJson, invertTemplate=True, toJsonDir=outputPath, filter="*.json", recursive=True, fromJson=defaultJsonPath, outputJsonDir=mergedJsonPath, pydev=False)
