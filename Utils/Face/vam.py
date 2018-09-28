@@ -79,6 +79,8 @@ class VamFace:
     @staticmethod
     def mergeFaces( templateFace, fromFace, toFace, invertTemplate = False, copyNonMorphs = False ):
         newFace = copy.deepcopy( toFace )
+        tmpFromFace = copy.deepcopy( fromFace )
+        tmpFromFace.matchMorphs( templateFace )
 
         # Copy non-morphs, like clothes and skin
         if copyNonMorphs:
@@ -103,7 +105,7 @@ class VamFace:
 
         # Now copy, based on the template, the morphs
         newMorphs = []
-        for morph in fromFace.morphs:
+        for morph in tmpFromFace.morphs:
             # First check the template to see if we want to copy the morph
             templateMorph = templateFace._getMorph( morph['name'] )
 

@@ -43,7 +43,8 @@ def main( args ):
         templateJson = os.path.join(os.path.dirname(jsonPath), jsonData["baseJson"])
     
         params = None
-        params = argparse.Namespace(templateJson=templateJson, invertTemplate=True, toJsonDir=outputPath, filter="*.json", recursive=True, fromJson=defaultJsonPath, outputJsonDir=mergedJsonPath, pydev=False)
+        filter = "*{}".format( os.path.basename( jsonPath ) )  # Don't have two models end with same text or later one will overwrite previous output merge!
+        params = argparse.Namespace(templateJson=templateJson, invertTemplate=True, toJsonDir=outputPath, filter=filter, recursive=True, fromJson=defaultJsonPath, outputJsonDir=mergedJsonPath, pydev=False)
         mergeJson.main(params)
 
 
