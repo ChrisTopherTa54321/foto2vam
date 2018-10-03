@@ -94,7 +94,7 @@ class VamFace:
                     # Merge fromFace geometry with toFace
                     newStorable.update( storable )
                     # But keep toFace morphs for now
-                    newStorable['morphs'] = VamFace.getStorable( toFace._storables, "geometry")["morphs"]
+                    newStorable['morphs'] = VamFace.getStorable( toFace._storables, "geometry", create=True)["morphs"]
                 else:
                     # Otherwise copy this morph into newFace
                     newStorable = VamFace.getStorable( newFace._storables, id, create = True )
@@ -137,7 +137,20 @@ class VamFace:
 
             newMorphs.append( morphCopy )
 #
+        # Now merge newMorphs in with the current morphs
+        # Now add in any morphs from toFace that aren't in newMorphs
+        origStorables = VamFace.getStorable( newFace._storables, "geometry", create=True)
+        if "morphs" in origStorables:
+            origMorphs = origStorables["morphs"]
+            for morph in origMorphs:
+                morphName = morph["name"]
+                newMorph = VamFace.getStorable( newMorphs, id=morphName, key="name")
+                # If a morph was in origMorphs, but not in newMorphs, append it to newMorphs
+                if newMorph is None:
+                    newMorphs.append(morph)
+
         VamFace.setStorable( newFace._storables, "geometry", "morphs", newMorphs, create=True)
+        newFace.morphs = newMorphs
         newFace._createMorphFloats()
 
         return newFace
@@ -287,12 +300,12 @@ class VamFace:
 
 
     @staticmethod
-    def getStorable( storables, id, create = False ):
-        storable = list(filter(lambda x : x['id'] == id, storables ) )
+    def getStorable( storables, id, create = False, key="id" ):
+        storable = list(filter(lambda x : x[key] == id, storables ) )
         if len(storable) > 0:
             return storable[0]
         elif create:
-            newNode = { "id": id }
+            newNode = { key: id }
             storables.append( newNode )
             return newNode
         return None
