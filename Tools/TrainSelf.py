@@ -747,5 +747,6 @@ def parseArgs():
 # program entry point
 #
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     args = parseArgs()
     main( args )
